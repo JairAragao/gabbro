@@ -25,8 +25,7 @@ próprio, sem build step, uma dependência só (express).
 ## Início rápido
 
 ```bash
-# dentro de um clone deste repo
-npm install
+git clone https://github.com/JairAragao/gabbro.git && cd gabbro && npm install
 node bin/gabbro.js /caminho/do/seu/clone-dbml
 ```
 

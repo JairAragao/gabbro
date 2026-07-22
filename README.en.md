@@ -25,8 +25,7 @@ its own. No database, no build step, one dependency (express).
 ## Quick start
 
 ```bash
-# inside a clone of this repo
-npm install
+git clone https://github.com/JairAragao/gabbro.git && cd gabbro && npm install
 node bin/gabbro.js /path/to/your/dbml-clone
 ```
 
