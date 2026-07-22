@@ -1,6 +1,6 @@
 {
   "name": "gabbro",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Git-native DBML studio — diagram, docs and diff for your database schema, versioned in git",
   "license": "MIT",
   "author": "Jair Aragão",
