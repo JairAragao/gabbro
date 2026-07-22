@@ -10,7 +10,8 @@ const BRANCH_RE = /^[\w./-]+$/
 
 const state = {
   repoCloned: false,
-  lastFetch: 0
+  lastFetch: 0,
+  initError: null
 }
 
 // Git errors can echo the remote URL (which embeds the token) — always mask it.
@@ -108,7 +109,16 @@ async function bootstrap () {
   const branches = await listBranches()
   const hasOnMaster = branches.includes('master') && (await showFileRaw('origin/master', cfg.dbmlFile)) !== null
   const hasOnDevelop = branches.includes('develop') && (await showFileRaw('origin/develop', cfg.dbmlFile)) !== null
-  if (hasOnMaster || hasOnDevelop) return
+  if (hasOnMaster || hasOnDevelop) {
+    // DBML already tracked, but the edit branch may still be missing (e.g. repo only has master).
+    if (!branches.includes(cfg.editBranch)) {
+      const base = branches.includes('master') ? 'origin/master' : `origin/${branches[0]}`
+      await git(['checkout', '-B', cfg.editBranch, base])
+      await git(['push', 'origin', cfg.editBranch])
+      await fetchIfStale(true)
+    }
+    return
+  }
 
   if (branches.includes('master')) {
     await git(['checkout', '-B', 'master', 'origin/master'])

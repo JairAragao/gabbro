@@ -1,11 +1,16 @@
 // Thin fetch wrappers over the Gabbro server API.
 
-async function request (path, opts) {
+async function request (path, opts, attempt = 0) {
   let res
   try {
     res = await fetch(path, opts)
   } catch (e) {
     throw new Error('server unreachable')
+  }
+  // 503 while the server is still cloning the repo on boot — wait and retry.
+  if (res.status === 503 && attempt < 5) {
+    await new Promise(r => setTimeout(r, 1500))
+    return request(path, opts, attempt + 1)
   }
   if (!res.ok) {
     let msg = `${res.status} ${res.statusText}`

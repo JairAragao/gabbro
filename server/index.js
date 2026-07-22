@@ -18,6 +18,9 @@ app.use('/api', (req, res, next) => {
 const wrap = fn => (req, res, next) => fn(req, res).catch(next)
 
 app.get('/api/health', (req, res) => {
+  if (repo.state.initError) {
+    return res.status(503).json({ ok: false, error: 'repository init failed', repoCloned: false })
+  }
   res.json({ ok: true, repoCloned: repo.state.repoCloned, lastFetch: repo.state.lastFetch })
 })
 
@@ -96,4 +99,7 @@ app.listen(cfg.port, () => {
 repo.ensureClone()
   .then(() => repo.bootstrap())
   .then(() => console.log('repository ready'))
-  .catch(e => console.error(`repository init failed: ${repo.sanitize(e.message)}`))
+  .catch(e => {
+    repo.state.initError = repo.sanitize(e.message)
+    console.error(`repository init failed: ${repo.state.initError}`)
+  })
