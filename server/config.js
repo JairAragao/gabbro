@@ -1,22 +1,54 @@
 'use strict'
 
+const fs = require('fs')
 const path = require('path')
+
+const settings = require('./settings')
 
 const env = process.env
 
-const gitRepo = env.GIT_REPO || ''
+// Repo resolution priority: CLI arg (bin/gabbro.js injects GABBRO_REPO) >
+// saved lastRepo (~/.gabbro/settings.json) > env GIT_REPO (the v1/hosted path).
+function resolveRepo () {
+  const cli = (env.GABBRO_REPO || '').trim()
+  if (cli) return cli
+  const s = settings.read()
+  const last = typeof s.lastRepo === 'string' ? s.lastRepo.trim() : ''
+  if (last && fs.existsSync(last)) return last
+  return (env.GIT_REPO || '').trim()
+}
+
+const gitRepo = resolveRepo()
 if (!gitRepo) {
-  console.error('GIT_REPO env var is required (https URL or local filesystem path)')
+  console.error('no repository: run `gabbro <path>` or set GIT_REPO (https URL or local filesystem path)')
   process.exit(1)
 }
 
-// Local filesystem repos (dev) need no token; remote https repos usually do.
-const isLocalRepo = !/^https?:\/\//i.test(gitRepo)
+const isUrl = /^https?:\/\//i.test(gitRepo)
+
+// URL → hosted (v1 Dokploy path, untouched). Local path WITH a .git dir →
+// local (operate directly on the user's clone, their identity/credentials/
+// branch). Path without .git keeps the v1 behavior (clone into DATA_DIR).
+// GABBRO_MODE=hosted|local overrides the detection.
+function detectMode () {
+  const override = (env.GABBRO_MODE || '').trim().toLowerCase()
+  if (override === 'hosted' || override === 'local') return override
+  if (isUrl) return 'hosted'
+  if (fs.existsSync(path.join(path.resolve(gitRepo), '.git'))) return 'local'
+  return 'hosted'
+}
+
+const mode = detectMode()
+
+function deriveName (s) {
+  return (String(s).replace(/[\\/]+$/, '').split(/[\\/]/).pop() || 'repo').replace(/\.git$/, '')
+}
 
 module.exports = {
   port: parseInt(env.PORT, 10) || 8080,
   gitRepo,
-  isLocalRepo,
+  mode,
+  isLocalRepo: !isUrl,
   gitToken: env.GIT_TOKEN || '',
   dbmlFile: env.DBML_FILE || 'database.dbml',
   positionsFile: 'positions.json',
@@ -25,5 +57,20 @@ module.exports = {
   dataDir: path.resolve(env.DATA_DIR || '/data'),
   gitUserName: env.GIT_USER_NAME || 'gabbro',
   gitUserEmail: env.GIT_USER_EMAIL || 'gabbro@local',
-  repoName: (gitRepo.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || 'repo').replace(/\.git$/, '')
+  repoPath: mode === 'local' ? path.resolve(gitRepo) : null,
+  repoName: deriveName(gitRepo),
+
+  // Worktree the git commands run in: the user's own clone in local mode, the
+  // managed clone under DATA_DIR in hosted mode.
+  repoDir () {
+    return this.mode === 'local' ? this.repoPath : path.join(this.dataDir, 'repo')
+  },
+
+  // Local-mode repo switch (PUT /api/repo). Caller validates the path has .git.
+  setRepo (p) {
+    const abs = path.resolve(p)
+    this.gitRepo = abs
+    this.repoPath = abs
+    this.repoName = deriveName(abs)
+  }
 }

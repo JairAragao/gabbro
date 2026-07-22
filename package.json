@@ -5,6 +5,9 @@
   "license": "MIT",
   "author": "Jair Aragão",
   "main": "server/index.js",
+  "bin": {
+    "gabbro": "bin/gabbro.js"
+  },
   "scripts": {
     "start": "node server/index.js"
   },

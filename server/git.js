@@ -5,7 +5,6 @@ const fs = require('fs')
 const path = require('path')
 const cfg = require('./config')
 
-const repoDir = path.join(cfg.dataDir, 'repo')
 const BRANCH_RE = /^[\w./-]+$/
 
 const state = {
@@ -23,7 +22,13 @@ function sanitize (msg) {
 
 function git (args, opts = {}) {
   return new Promise((resolve, reject) => {
-    execFile('git', args, { cwd: opts.cwd || repoDir, maxBuffer: 64 * 1024 * 1024 }, (err, stdout, stderr) => {
+    execFile('git', args, {
+      cwd: opts.cwd || cfg.repoDir(),
+      maxBuffer: 64 * 1024 * 1024,
+      // Never hang waiting for a password prompt — fail fast instead (push/
+      // fetch against an authenticated remote without a credential helper).
+      env: { ...process.env, GIT_TERMINAL_PROMPT: '0' }
+    }, (err, stdout, stderr) => {
       if (err) {
         const e = new Error(sanitize(`git ${args[0]} failed: ${(stderr || err.message).trim()}`))
         reject(e)
@@ -42,11 +47,14 @@ function remoteUrl () {
   return u.toString()
 }
 
+// Hosted-only: clones into DATA_DIR and sets the service identity. Local mode
+// never runs this — it operates directly on the user's clone with THEIR
+// identity (never a fake one).
 async function ensureClone () {
   fs.mkdirSync(cfg.dataDir, { recursive: true })
-  if (!fs.existsSync(path.join(repoDir, '.git'))) {
+  if (!fs.existsSync(path.join(cfg.repoDir(), '.git'))) {
     // Full clone on purpose: `git show origin/<branch>:<file>` needs all branches.
-    await git(['clone', remoteUrl(), repoDir], { cwd: cfg.dataDir })
+    await git(['clone', remoteUrl(), cfg.repoDir()], { cwd: cfg.dataDir })
   }
   await git(['config', 'user.name', cfg.gitUserName])
   await git(['config', 'user.email', cfg.gitUserEmail])
@@ -54,10 +62,25 @@ async function ensureClone () {
   state.lastFetch = Date.now()
 }
 
+// Local-mode init: no clone, just validate the worktree and mark ready.
+function initLocal () {
+  if (!fs.existsSync(path.join(cfg.repoDir(), '.git'))) {
+    throw new Error(`not a git repository (missing .git): ${cfg.repoDir()}`)
+  }
+  state.repoCloned = true
+  state.lastFetch = 0
+}
+
 async function fetchIfStale (force) {
   if (!state.repoCloned) return
   if (!force && Date.now() - state.lastFetch < cfg.fetchTtlMs) return
-  await git(['fetch', 'origin', '--prune'])
+  try {
+    await git(['fetch', 'origin', '--prune'])
+  } catch (e) {
+    // Local clones may have no remote (or no credentials) — reads must keep
+    // working; only the hosted path treats a failed fetch as fatal.
+    if (cfg.mode !== 'local') throw e
+  }
   state.lastFetch = Date.now()
 }
 
@@ -100,7 +123,7 @@ const POSITIONS_TEMPLATE = '{"version":1,"tables":{}}\n'
 // Writes the file only if it does not already exist (add-only: bootstrap must
 // never overwrite anything in a pre-existing repo).
 function writeIfMissing (file, content) {
-  const abs = path.join(repoDir, file)
+  const abs = path.join(cfg.repoDir(), file)
   if (fs.existsSync(abs)) return
   fs.writeFileSync(abs, content)
 }
@@ -174,7 +197,7 @@ async function doCommitPush (file, content, message) {
   }
 
   const writeAndAdd = async () => {
-    fs.writeFileSync(path.join(repoDir, file), content)
+    fs.writeFileSync(path.join(cfg.repoDir(), file), content)
     await git(['add', '--', file])
   }
 
@@ -199,8 +222,10 @@ async function doCommitPush (file, content, message) {
 
 module.exports = {
   state,
+  git,
   sanitize,
   ensureClone,
+  initLocal,
   bootstrap,
   fetchIfStale,
   listBranches,

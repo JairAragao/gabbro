@@ -4,9 +4,24 @@ const path = require('path')
 const express = require('express')
 const cfg = require('./config')
 const repo = require('./git')
+const local = require('./local')
 
 const app = express()
 app.use(express.json({ limit: '10mb' }))
+
+// Local mode is unauthenticated on 127.0.0.1 — reject any non-loopback Host
+// header (DNS rebinding: a malicious site resolving its own domain to
+// 127.0.0.1 would send that domain as Host, which fails this check).
+const LOCAL_HOST = /^(localhost|127\.0\.0\.1|\[::1\]|::1)(:\d+)?$/i
+if (cfg.mode === 'local') {
+  app.use((req, res, next) => {
+    const host = String(req.headers.host || '')
+    if (host && !LOCAL_HOST.test(host)) {
+      return res.status(403).json({ error: 'forbidden: non-local host' })
+    }
+    next()
+  })
+}
 
 // Repo clone/bootstrap runs async on boot; API answers 503 until it is ready.
 app.use('/api', (req, res, next) => {
@@ -24,9 +39,28 @@ app.get('/api/health', (req, res) => {
   res.json({ ok: true, repoCloned: repo.state.repoCloned, lastFetch: repo.state.lastFetch })
 })
 
-app.get('/api/config', (req, res) => {
-  res.json({ dbmlFile: cfg.dbmlFile, editBranch: cfg.editBranch, repoName: cfg.repoName })
-})
+app.get('/api/config', wrap(async (req, res) => {
+  const base = {
+    mode: cfg.mode,
+    dbmlFile: cfg.dbmlFile,
+    editBranch: cfg.editBranch,
+    repoName: cfg.repoName,
+    repoPath: cfg.mode === 'local' ? cfg.repoDir() : null
+  }
+  if (cfg.mode === 'local') {
+    const id = await local.getIdentity()
+    const identity = id.name && id.email ? id : null
+    return res.json({
+      ...base,
+      identity,
+      currentBranch: await local.currentBranch(),
+      // Derived, never configured: without identity the local app degrades
+      // gracefully to a pure reader (view/docs/diff/history keep working).
+      readOnly: !identity
+    })
+  }
+  res.json({ ...base, identity: null, currentBranch: cfg.editBranch, readOnly: false })
+}))
 
 app.get('/api/branches', wrap(async (req, res) => {
   await repo.fetchIfStale(false)
@@ -92,14 +126,37 @@ app.use((err, req, res, next) => {
   res.status(status).json({ error: repo.sanitize(err.message) })
 })
 
-app.listen(cfg.port, () => {
-  console.log(`gabbro listening on :${cfg.port} — repo ${cfg.repoName}, edit branch ${cfg.editBranch}`)
+// Local: bind loopback only (unauthenticated API must never reach the LAN).
+// Hosted: 0.0.0.0 as in v1 (Docker/Dokploy).
+const bindHost = cfg.mode === 'local' ? '127.0.0.1' : '0.0.0.0'
+const server = app.listen(cfg.port, bindHost, () => {
+  console.log(`gabbro (${cfg.mode}) listening on ${bindHost}:${cfg.port} — repo ${cfg.repoName}` +
+    (cfg.mode === 'hosted' ? `, edit branch ${cfg.editBranch}` : ''))
+})
+server.on('error', e => {
+  if (e.code === 'EADDRINUSE') {
+    console.error(`port ${cfg.port} is already in use — is another gabbro (or app) running on it?`)
+    process.exit(1)
+  }
+  throw e
 })
 
-repo.ensureClone()
-  .then(() => repo.bootstrap())
-  .then(() => console.log('repository ready'))
-  .catch(e => {
+if (cfg.mode === 'local') {
+  // Operate directly on the user's clone — no intermediate clone, no bootstrap,
+  // no identity injection.
+  try {
+    repo.initLocal()
+    console.log(`repository ready (local worktree ${cfg.repoDir()})`)
+  } catch (e) {
     repo.state.initError = repo.sanitize(e.message)
     console.error(`repository init failed: ${repo.state.initError}`)
-  })
+  }
+} else {
+  repo.ensureClone()
+    .then(() => repo.bootstrap())
+    .then(() => console.log('repository ready'))
+    .catch(e => {
+      repo.state.initError = repo.sanitize(e.message)
+      console.error(`repository init failed: ${repo.state.initError}`)
+    })
+}
