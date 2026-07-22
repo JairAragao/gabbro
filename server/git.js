@@ -246,6 +246,112 @@ async function doCommitPush (file, content, message) {
   return (await git(['rev-parse', 'HEAD'])).trim()
 }
 
+// ── History ──────────────────────────────────────────────────────────────────
+// logAll: paginated commit log of `ref`, filtered to the tracked files (or one
+// specific file). Field separator \x1f, record marker \x1e (never appear in
+// commit metadata). Asks for limit+1 to know hasMore without a separate count.
+async function logAll ({ skip = 0, limit = 30, file = null, ref = 'HEAD' } = {}) {
+  const off = Math.max(0, Number(skip) || 0)
+  const lim = Math.min(200, Math.max(1, Number(limit) || 30))
+  const MARK = '\x1eCMT\x1f'
+  const FMT = `${MARK}%H%x1f%h%x1f%aI%x1f%an%x1f%ae%x1f%s`
+  const paths = file ? [file] : [cfg.dbmlFile, cfg.positionsFile]
+  let out
+  try {
+    out = await git([
+      'log', `--format=${FMT}`, '--name-only',
+      `--skip=${off}`, `--max-count=${lim + 1}`, ref, '--', ...paths
+    ])
+  } catch (e) {
+    if (/does not have any commits|bad revision|unknown revision/i.test(e.message)) {
+      return { commits: [], hasMore: false }
+    }
+    throw e
+  }
+  const parts = String(out || '').split(MARK).filter(s => s && s.trim())
+  const commits = []
+  for (const p of parts) {
+    const nl = p.indexOf('\n')
+    const headLine = nl === -1 ? p : p.slice(0, nl)
+    const rest = nl === -1 ? '' : p.slice(nl + 1)
+    const [hash, shortHash, date, authorName, authorEmail, message] = headLine.split('\x1f')
+    commits.push({
+      hash: (hash || '').trim(),
+      shortHash: (shortHash || '').trim(),
+      date: (date || '').trim(),
+      authorName: (authorName || '').trim(),
+      authorEmail: (authorEmail || '').trim(),
+      message: (message || '').trim(),
+      files: rest.split('\n').map(l => l.trim()).filter(Boolean)
+    })
+  }
+  const hasMore = commits.length > lim
+  return { commits: commits.slice(0, lim), hasMore }
+}
+
+// showAt: file content at `ref` (e.g. "<hash>", "<hash>^"). Missing path or
+// unresolvable ref (root commit's parent) → '' — history diffs against empty.
+async function showAt (ref, file) {
+  try {
+    return await git(['show', `${ref}:${file}`])
+  } catch (e) {
+    if (/exists on disk, but not in|does not exist|unknown revision|bad revision|invalid object|fatal: path/i.test(e.message)) {
+      return ''
+    }
+    throw e
+  }
+}
+
+// Resolves any revision expression to a full commit SHA, '' when it does not
+// exist. Internal — takes git syntax like "<hash>^".
+async function resolveRev (expr) {
+  try {
+    return (await git(['rev-parse', '--verify', '--quiet', `${expr}^{commit}`])).trim() || ''
+  } catch {
+    return ''
+  }
+}
+
+// resolveCommit: user-facing — validates the hash FORMAT (400) before touching
+// git, then resolves to the full SHA ('' when unknown → route answers 404).
+async function resolveCommit (hash) {
+  if (!/^[0-9a-f]{4,40}$/i.test(String(hash || ''))) {
+    const e = new Error('invalid commit hash')
+    e.status = 400
+    throw e
+  }
+  return resolveRev(hash)
+}
+
+// Empty-tree hash: diff base for root commits. hash-object keeps it correct on
+// SHA-256 repos; fallback is the well-known SHA-1 constant.
+let _emptyTree = null
+async function emptyTreeHash () {
+  if (_emptyTree) return _emptyTree
+  try {
+    _emptyTree = (await git(['hash-object', '-t', 'tree', process.platform === 'win32' ? 'NUL' : '/dev/null'])).trim()
+  } catch {
+    _emptyTree = '4b825dc642cb6eb9a060e54bf8d69288fbee4904'
+  }
+  return _emptyTree
+}
+
+// Unified text diff of one file between a commit and its parent (empty tree
+// for the root commit).
+async function diffFile (hash, file) {
+  let base = await resolveRev(`${hash}^`)
+  if (!base) base = await emptyTreeHash()
+  return git(['diff', base, hash, '--', file])
+}
+
+// Metadata of a single commit (for the /api/commit/:hash response).
+async function commitMeta (hash) {
+  const FMT = '%H%x1f%h%x1f%aI%x1f%an%x1f%ae%x1f%s'
+  const out = await git(['log', '-1', `--format=${FMT}`, hash])
+  const [h, shortHash, date, authorName, authorEmail, message] = out.trim().split('\x1f')
+  return { hash: h, shortHash, date, authorName, authorEmail, message }
+}
+
 module.exports = {
   state,
   git,
@@ -257,5 +363,11 @@ module.exports = {
   listBranches,
   showFile,
   serialize,
-  commitPushFile
+  commitPushFile,
+  logAll,
+  showAt,
+  resolveCommit,
+  emptyTreeHash,
+  diffFile,
+  commitMeta
 }

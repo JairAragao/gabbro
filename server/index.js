@@ -211,6 +211,75 @@ app.put('/api/repo', wrap(async (req, res) => {
   res.json({ ok: true, path: abs, repoName: cfg.repoName, currentBranch: await local.currentBranch() })
 }))
 
+// ── History ──────────────────────────────────────────────────────────────────
+// Only the two tracked files are inspectable — anything else is 400 (never a
+// free file-content oracle over the repo).
+function historyFile (q) {
+  if (!q) return null
+  if (q !== cfg.dbmlFile && q !== cfg.positionsFile) {
+    const e = new Error(`file must be ${cfg.dbmlFile} or ${cfg.positionsFile}`)
+    e.status = 400
+    throw e
+  }
+  return q
+}
+
+// Resolves the ref the history walks: local → a local branch (default HEAD =
+// current branch); hosted → origin/<branch> (default edit branch).
+async function historyRef (branchQ) {
+  if (cfg.mode === 'local') {
+    if (!branchQ) return 'HEAD'
+    const branches = await repo.listBranches()
+    if (!branches.includes(branchQ)) {
+      const e = new Error('branch not found')
+      e.status = 404
+      throw e
+    }
+    return `refs/heads/${branchQ}`
+  }
+  await repo.fetchIfStale(false)
+  const b = branchQ || cfg.editBranch
+  const branches = await repo.listBranches()
+  if (!branches.includes(b)) {
+    const e = new Error('branch not found')
+    e.status = 404
+    throw e
+  }
+  return `origin/${b}`
+}
+
+app.get('/api/history', wrap(async (req, res) => {
+  const ref = await historyRef(req.query.branch)
+  res.json(await repo.logAll({
+    skip: req.query.skip,
+    limit: req.query.limit,
+    file: historyFile(req.query.file),
+    ref
+  }))
+}))
+
+// Content + parent content of one tracked file at a commit — the front parses
+// both and renders the structural diff. Root commit → parentContent ''.
+app.get('/api/commit/:hash', wrap(async (req, res) => {
+  const full = await repo.resolveCommit(req.params.hash)
+  if (!full) return res.status(404).json({ error: 'commit not found' })
+  const file = historyFile(req.query.file) || cfg.dbmlFile
+  const [content, parentContent, meta] = await Promise.all([
+    repo.showAt(full, file),
+    repo.showAt(`${full}^`, file),
+    repo.commitMeta(full)
+  ])
+  res.json({ content, parentContent, meta })
+}))
+
+// Unified text diff (secondary view).
+app.get('/api/commit/:hash/diff', wrap(async (req, res) => {
+  const full = await repo.resolveCommit(req.params.hash)
+  if (!full) return res.status(404).json({ error: 'commit not found' })
+  const file = historyFile(req.query.file) || cfg.dbmlFile
+  res.type('text/plain').send(await repo.diffFile(full, file))
+}))
+
 app.use(express.static(path.join(__dirname, '..', 'public')))
 
 app.use((err, req, res, next) => {
