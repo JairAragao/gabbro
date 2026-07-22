@@ -124,6 +124,7 @@ async function switchBranch (b) {
 /* ---------- toolbar wiring ---------- */
 function setTab (tab) {
   state.tab = tab
+  localStorage.setItem('gabbro:tab', tab)
   document.querySelectorAll('#tabs .tab').forEach(el => el.classList.toggle('on', el.dataset.tab === tab))
   $('diagramSection').classList.toggle('hidden', tab !== 'diagram')
   $('docsSection').classList.toggle('hidden', tab !== 'docs')
@@ -267,7 +268,10 @@ async function boot () {
     if (p && p.tables) state.positions = { version: p.version || 1, tables: p.tables }
 
     await switchBranch(initial)
-    handleHash()
+    // restore last tab; a stale #tbl-x hash from docs anchors must not hijack the diagram on reload
+    const savedTab = localStorage.getItem('gabbro:tab') || 'diagram'
+    setTab(savedTab)
+    if (savedTab === 'docs') handleHash()
   } catch (e) { fail(e) }
 }
 
