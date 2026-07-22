@@ -24,16 +24,33 @@ async function request (path, opts, attempt = 0) {
 
 const json = async (path, opts) => (await request(path, opts)).json()
 const text = async (path, opts) => (await request(path, opts)).text()
-const put = body => ({
-  method: 'PUT',
+const send = (method, body) => ({
+  method,
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify(body)
 })
+const put = body => send('PUT', body)
 
 export const getConfig = () => json('/api/config')
 export const getBranches = () => json('/api/branches')
 export const getDbml = branch => text(`/api/dbml/${encodeURIComponent(branch)}`)
 export const getPositions = () => json('/api/positions')
-export const putDbml = (content, message) => json('/api/dbml', put({ content, message }))
-export const putPositions = obj => json('/api/positions', put(obj))
+// Local mode requires `branch` in the body (the branch being edited) — the
+// server answers 409 when it no longer matches the checked-out branch.
+export const putDbml = (content, message, branch) =>
+  json('/api/dbml', put(branch ? { content, message, branch } : { content, message }))
+export const putPositions = (obj, branch) =>
+  json('/api/positions', put(branch ? { ...obj, branch } : obj))
 export const refresh = () => json('/api/refresh', { method: 'POST' })
+
+/* ---------- local mode: sync + repo switching ---------- */
+export const sync = () => json('/api/sync', { method: 'POST' })
+export const getSyncState = () => json('/api/sync-state')
+export const getRepo = () => json('/api/repo')
+export const putRepo = path => json('/api/repo', put({ path }))
+
+/* ---------- history ---------- */
+export const getHistory = (skip, limit) =>
+  json(`/api/history?skip=${skip | 0}&limit=${limit | 0}`)
+export const getCommit = hash => json(`/api/commit/${encodeURIComponent(hash)}`)
+export const getCommitDiff = hash => text(`/api/commit/${encodeURIComponent(hash)}/diff`)

@@ -1,11 +1,15 @@
 // Frontend smoke checks, runnable in plain node (no browser):
-//   node scripts/smoke-front.mjs [path-to-large.dbml]
-// Validates parser.js (incl. increment/default/Indexes extensions) and
-// diff.js (all six structural change kinds) — both must stay DOM-free.
+//   node scripts/smoke-front.mjs [path-to-large.dbml] [path-to-git-clone]
+// Validates parser.js (incl. increment/default/Indexes extensions), diff.js
+// (all six structural change kinds + summary line), history.js pure helpers,
+// and — when a git clone is given — the history flow (commit vs parent via
+// parseDBML+diffModels over real commits). All modules must stay DOM-free.
 
 import { readFileSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
 import { parseDBML } from '../public/js/parser.js'
-import { diffModels, diffSummary, buildUnionModel } from '../public/js/diff.js'
+import { diffModels, diffSummary, diffSummaryLine, buildUnionModel } from '../public/js/diff.js'
+import { normalizeHistory, relativeTime, firstLine } from '../public/js/history.js'
 
 let failures = 0
 function check (name, cond, detail) {
@@ -132,6 +136,99 @@ check('composite index cols', JSON.stringify(mi.tables.t1.indexes[0].cols) === '
 check('index name', mi.tables.t1.indexes[0].name === 't1_b_c_key')
 check('single index + unique flag', mi.tables.t1.indexes[1].cols[0] === 'b' && mi.tables.t1.indexes[1].unique === true)
 check('columns after Indexes block intact', mi.tables.t1.columns.length === 3)
+
+/* ---------- 4. history helpers: payload parse + summary line ---------- */
+console.log('\n[4] history payload parse + diff summary line')
+const payload = {
+  commits: [
+    {
+      hash: 'a'.repeat(40),
+      shortHash: 'aaaaaaa',
+      date: '2026-07-22T10:00:00-03:00',
+      authorName: 'Jair',
+      authorEmail: 'jair@example.com',
+      message: 'docs(dbml): add mrp tables\n\nbody line',
+      files: ['database.dbml', 'positions.json']
+    },
+    { hash: 'b'.repeat(40), message: 'chore(positions): update via gabbro' }
+  ],
+  hasMore: true
+}
+const nh = normalizeHistory(payload)
+check('payload: commits kept', nh.commits.length === 2)
+check('payload: hasMore kept', nh.hasMore === true)
+check('payload: fields preserved', nh.commits[0].authorName === 'Jair' &&
+  nh.commits[0].shortHash === 'aaaaaaa' && nh.commits[0].files.length === 2)
+check('payload: shortHash derived when missing', nh.commits[1].shortHash === 'bbbbbbb')
+check('payload: missing fields defaulted', nh.commits[1].files.length === 0 && nh.commits[1].authorName === '')
+const bad = normalizeHistory({ commits: [null, {}, { hash: 42 }], hasMore: 'yes' })
+check('payload: malformed entries dropped', bad.commits.length === 0 && bad.hasMore === true)
+check('payload: garbage input safe', normalizeHistory(null).commits.length === 0)
+check('firstLine takes first line', firstLine(payload.commits[0].message) === 'docs(dbml): add mrp tables')
+const now = new Date('2026-07-22T14:00:00-03:00').getTime()
+check('relativeTime hours', relativeTime('2026-07-22T10:00:00-03:00', now) === '4h ago')
+check('relativeTime bad date falls back', relativeTime('not-a-date', now) === 'not-a-date')
+
+check('summary line +/~/-', diffSummaryLine(d) === '+1 table, ~2 changed, -1 removed', diffSummaryLine(d))
+check('summary line empty diff', diffSummaryLine(diffModels(base, base)) === '')
+
+/* ---------- 5. history flow over real commits (needs a clone path) ---------- */
+const repoPath = process.argv[3]
+if (repoPath) {
+  console.log(`\n[5] history diff over real commits: ${repoPath}`)
+  const git = args => execFileSync('git', args, { cwd: repoPath, maxBuffer: 64 * 1024 * 1024 }).toString()
+  const FILE = 'database.dbml'
+  const hashes = git(['log', '--format=%H', '--', FILE]).split('\n').filter(Boolean)
+  check('>= 2 commits touching the dbml', hashes.length >= 2, `got ${hashes.length}`)
+
+  // (a) file-creation commit: parent has no dbml → parseDBML('') → every table added
+  const firstHash = hashes[hashes.length - 1]
+  const firstContent = git(['show', `${firstHash}:${FILE}`])
+  const firstModel = parseDBML(firstContent)
+  const creation = diffModels(parseDBML(''), firstModel)
+  const allAdded = Object.values(creation.tables).every(t => t.status === 'added')
+  check('creation commit: parent empty → all tables added',
+    firstModel.order.length > 0 && allAdded &&
+    Object.keys(creation.tables).length === firstModel.order.length)
+  check('creation commit: summary line says +N tables',
+    diffSummaryLine(creation) === `+${firstModel.order.length} tables`, diffSummaryLine(creation))
+
+  // (b) newest commit vs its parent — statuses cross-checked against set
+  // membership computed independently from the two parsed models
+  const newest = hashes[0]
+  let parentContent = ''
+  try { parentContent = git(['show', `${newest}^:${FILE}`]) } catch { parentContent = '' }
+  const pm = parseDBML(parentContent)
+  const cm = parseDBML(git(['show', `${newest}:${FILE}`]))
+  const dd = diffModels(pm, cm)
+  const pSet = new Set(pm.order), cSet = new Set(cm.order)
+  let statusesOk = true
+  for (const [nm, t] of Object.entries(dd.tables)) {
+    const expected = !pSet.has(nm) ? 'added' : !cSet.has(nm) ? 'removed' : null
+    if (expected && t.status !== expected) { statusesOk = false; break }
+    if (!['added', 'removed', 'modified', 'same'].includes(t.status)) { statusesOk = false; break }
+  }
+  check('newest commit vs parent: statuses consistent with parsed models', statusesOk)
+  check('identity diff is all same',
+    Object.values(diffModels(cm, cm).tables).every(t => t.status === 'same'))
+
+  // (c) two distinct real commits: every membership difference is flagged
+  const older = hashes[Math.min(hashes.length - 1, 1)]
+  const om = parseDBML(git(['show', `${older}:${FILE}`]))
+  const od = diffModels(om, cm)
+  const oSet = new Set(om.order)
+  const addedExpected = cm.order.filter(t => !oSet.has(t))
+  const removedExpected = om.order.filter(t => !cSet.has(t))
+  const s2 = diffSummary(od)
+  check('cross-commit: added tables detected exactly',
+    JSON.stringify(s2.added) === JSON.stringify([...addedExpected].sort()),
+    `expected ${addedExpected.length}, got ${s2.added.length}`)
+  check('cross-commit: removed tables detected exactly',
+    JSON.stringify(s2.removed) === JSON.stringify([...removedExpected].sort()),
+    `expected ${removedExpected.length}, got ${s2.removed.length}`)
+} else {
+  console.log('\n[5] real-commit history check skipped (no clone path argument)')
+}
 
 console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed')
 process.exit(failures ? 1 : 0)

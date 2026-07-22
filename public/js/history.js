@@ -1,0 +1,236 @@
+// History tab: paginated commit list of the two tracked files, plus a detail
+// panel for the commit being viewed (meta + collapsible unified text diff).
+// Opening a commit is delegated to app.js (enters "history mode" and renders
+// the structural diff in the Diagram/Docs tabs).
+//
+// Pure helpers (normalizeHistory, relativeTime) have no DOM dependency so the
+// smoke script can exercise them in plain node.
+
+import * as api from './api.js'
+
+const PAGE = 30
+
+/* ---------- pure helpers (node-safe) ---------- */
+
+// Validates/normalizes a /api/history payload into {commits, hasMore} — every
+// commit is guaranteed the fields the list renders, whatever the server sent.
+export function normalizeHistory (payload) {
+  const raw = payload && Array.isArray(payload.commits) ? payload.commits : []
+  const commits = raw
+    .filter(c => c && typeof c.hash === 'string' && c.hash)
+    .map(c => ({
+      hash: c.hash,
+      shortHash: typeof c.shortHash === 'string' && c.shortHash ? c.shortHash : c.hash.slice(0, 7),
+      date: typeof c.date === 'string' ? c.date : '',
+      authorName: typeof c.authorName === 'string' ? c.authorName : '',
+      authorEmail: typeof c.authorEmail === 'string' ? c.authorEmail : '',
+      message: typeof c.message === 'string' ? c.message : '',
+      files: Array.isArray(c.files) ? c.files.filter(f => typeof f === 'string') : []
+    }))
+  return { commits, hasMore: !!(payload && payload.hasMore) }
+}
+
+// "2h ago" style relative time; falls back to the raw string on bad dates.
+export function relativeTime (iso, now = Date.now()) {
+  const t = new Date(iso).getTime()
+  if (!Number.isFinite(t)) return String(iso || '')
+  const s = Math.round((now - t) / 1000)
+  if (s < 45) return 'just now'
+  const m = Math.round(s / 60)
+  if (m < 60) return `${m}m ago`
+  const h = Math.round(m / 60)
+  if (h < 24) return `${h}h ago`
+  const d = Math.round(h / 24)
+  if (d < 30) return `${d}d ago`
+  const mo = Math.round(d / 30)
+  if (mo < 12) return `${mo}mo ago`
+  return `${Math.round(mo / 12)}y ago`
+}
+
+export function absoluteTime (iso) {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return String(iso || '')
+  return d.toLocaleString()
+}
+
+export const firstLine = msg => (msg || '').split('\n')[0] || '(no message)'
+
+/* ---------- DOM ---------- */
+
+const $ = id => document.getElementById(id)
+
+const state = {
+  commits: [],
+  skip: 0,
+  hasMore: false,
+  loading: false,
+  loaded: false,
+  activeHash: null,
+  diffShownFor: null
+}
+
+let hooks = { onOpenCommit: () => {}, onExit: () => {}, fail: () => {} }
+
+export function initHistory (h) {
+  hooks = { ...hooks, ...h }
+  $('histMore').addEventListener('click', () => loadPage().catch(hooks.fail))
+  $('histDetailClose').addEventListener('click', () => hooks.onExit())
+  $('histDiffToggle').addEventListener('click', () => toggleTextDiff().catch(hooks.fail))
+}
+
+// Called when the History tab is shown — loads the first page once.
+export async function ensureLoaded () {
+  if (state.loaded || state.loading) return
+  await reload()
+}
+
+// Marks the list stale without refetching — next tab open reloads it.
+export function invalidate () {
+  state.loaded = false
+  state.commits = []
+  state.skip = 0
+  state.hasMore = false
+  const list = typeof document !== 'undefined' && document.getElementById('histList')
+  if (list) list.innerHTML = ''
+}
+
+// Full reset + first page (refresh button, sync, repo switch).
+export async function reload () {
+  state.commits = []
+  state.skip = 0
+  state.hasMore = false
+  state.loaded = false
+  $('histList').innerHTML = ''
+  await loadPage()
+  state.loaded = true
+}
+
+async function loadPage () {
+  if (state.loading) return
+  state.loading = true
+  const btn = $('histMore')
+  btn.disabled = true
+  btn.textContent = 'Loading…'
+  try {
+    const page = normalizeHistory(await api.getHistory(state.skip, PAGE))
+    const startIndex = state.commits.length
+    state.commits = state.commits.concat(page.commits)
+    state.skip += page.commits.length
+    state.hasMore = page.hasMore
+    renderRows(page.commits, startIndex)
+    $('histEmpty').classList.toggle('hidden', state.commits.length > 0)
+  } finally {
+    state.loading = false
+    btn.disabled = false
+    btn.textContent = 'Load more'
+    btn.classList.toggle('hidden', !state.hasMore)
+  }
+}
+
+function renderRows (commits, startIndex) {
+  const list = $('histList')
+  commits.forEach((c, i) => {
+    const idx = startIndex + i
+    const li = document.createElement('li')
+    li.className = 'hist-row'
+    li.dataset.hash = c.hash
+
+    const top = document.createElement('div')
+    top.className = 'hist-top'
+    const pill = document.createElement('span')
+    pill.className = 'hist-pill mono'
+    pill.textContent = c.shortHash
+    top.appendChild(pill)
+    const msg = document.createElement('span')
+    msg.className = 'hist-msg'
+    msg.textContent = firstLine(c.message)
+    msg.title = c.message
+    top.appendChild(msg)
+    if (idx === 0) {
+      const cur = document.createElement('span')
+      cur.className = 'hist-pill current'
+      cur.textContent = 'current'
+      top.appendChild(cur)
+    }
+    li.appendChild(top)
+
+    const sub = document.createElement('div')
+    sub.className = 'hist-sub'
+    const when = document.createElement('span')
+    when.textContent = relativeTime(c.date)
+    when.title = absoluteTime(c.date)
+    const files = document.createElement('span')
+    files.className = 'hist-files mono'
+    files.textContent = c.files.join(' · ')
+    sub.append(author(c), sep(), when, sep(), files)
+    li.appendChild(sub)
+
+    li.addEventListener('click', () => hooks.onOpenCommit(c))
+    list.appendChild(li)
+  })
+  markActive()
+}
+
+const sep = () => Object.assign(document.createElement('span'), { className: 'hist-sep', textContent: '·' })
+function author (c) {
+  const el = document.createElement('span')
+  el.className = 'hist-author'
+  el.textContent = c.authorName || c.authorEmail || 'unknown'
+  el.title = c.authorEmail
+  return el
+}
+
+/* ---------- active commit + detail panel ---------- */
+
+// app.js calls this when entering/leaving history mode.
+export function setActive (commit) {
+  state.activeHash = commit ? commit.hash : null
+  markActive()
+  const panel = $('histDetail')
+  if (!commit) {
+    panel.classList.add('hidden')
+    hideTextDiff()
+    return
+  }
+  $('histDetailHash').textContent = commit.shortHash || commit.hash.slice(0, 7)
+  $('histDetailMsg').textContent = firstLine(commit.message)
+  $('histDetailMeta').textContent =
+    `${commit.authorName || commit.authorEmail || 'unknown'} · ${absoluteTime(commit.date)}`
+  if (state.diffShownFor !== commit.hash) hideTextDiff()
+  panel.classList.remove('hidden')
+}
+
+function markActive () {
+  document.querySelectorAll('#histList .hist-row').forEach(el => {
+    el.classList.toggle('on', !!state.activeHash && el.dataset.hash === state.activeHash)
+  })
+}
+
+/* ---------- secondary view: unified text diff ---------- */
+
+function hideTextDiff () {
+  $('histDiffPre').classList.add('hidden')
+  $('histDiffToggle').textContent = 'Show text diff'
+  state.diffShownFor = null
+}
+
+async function toggleTextDiff () {
+  const pre = $('histDiffPre')
+  if (!pre.classList.contains('hidden')) return hideTextDiff()
+  if (!state.activeHash) return
+  const btn = $('histDiffToggle')
+  btn.disabled = true
+  try {
+    if (state.diffShownFor !== state.activeHash || !pre.textContent) {
+      pre.textContent = 'Loading…'
+      pre.classList.remove('hidden')
+      pre.textContent = (await api.getCommitDiff(state.activeHash)) || '(no text diff)'
+      state.diffShownFor = state.activeHash
+    } else {
+      pre.classList.remove('hidden')
+    }
+    btn.textContent = 'Hide text diff'
+  } finally {
+    btn.disabled = false
+  }
+}

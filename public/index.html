@@ -11,12 +11,18 @@
 <body class="mode-view">
   <div id="toolbar">
     <span class="logo">Gabbro</span>
-    <span class="meta" id="repoName"></span>
+    <button class="repo-btn" id="repoBtn" title="Repository">
+      <span class="meta" id="repoName"></span><span id="repoCaret" class="hidden">&#9662;</span>
+    </button>
     <nav id="tabs">
       <button class="tab on" data-tab="diagram">Diagram</button>
       <button class="tab" data-tab="docs">Docs</button>
+      <button class="tab" data-tab="history">History</button>
     </nav>
     <select id="branchSel" title="Branch"></select>
+    <span id="syncBadge" class="hidden" title=""></span>
+    <button class="btn hidden" id="btnSync" title="Pull remote changes (rebase) and push local commits">
+      <span class="sync-ico">&#10227;</span>Sync</button>
     <button class="btn" id="btnRefresh" title="Fetch latest from remote">&#10227;</button>
     <button class="btn" id="btnDiff" title="Compare two branches">Diff</button>
     <span id="diffCtrls" class="hidden">
@@ -45,7 +51,28 @@
     <button class="btn primary" id="btnSavePos" hidden>Save positions</button>
   </div>
 
-  <div id="banner" class="hidden"></div>
+  <div id="repoMenu" class="hidden">
+    <div class="rm-title">Recent repositories</div>
+    <div id="repoRecents"></div>
+    <div id="repoNoRecents" class="rm-empty hidden">no other recent repos</div>
+    <div class="rm-open">
+      <input id="repoPath" placeholder="Path to a git clone&hellip;" autocomplete="off" spellcheck="false">
+      <button class="btn sm" id="repoOpen">Open</button>
+    </div>
+  </div>
+
+  <div id="banners">
+    <div id="histBanner" class="bnr hist hidden">
+      <span id="histBannerText"></span>
+      <button id="histExit" class="bnr-btn">Exit</button>
+    </div>
+    <div id="identityBanner" class="bnr hidden">
+      Configure git identity to edit &mdash;
+      <code>git config --global user.name "Your Name"</code> ·
+      <code>git config --global user.email you@example.com</code>
+    </div>
+    <div id="banner" class="bnr hidden"></div>
+  </div>
 
   <div id="main">
     <section id="diagramSection">
@@ -80,6 +107,25 @@
         <nav id="docsIndex"></nav>
       </aside>
       <div id="docsContent"></div>
+    </section>
+
+    <section id="historySection" class="hidden">
+      <div id="histWrap">
+        <div id="histDetail" class="hidden">
+          <div class="hd-line">
+            <span class="hist-pill mono" id="histDetailHash"></span>
+            <span class="hd-msg" id="histDetailMsg"></span>
+            <span class="spacer"></span>
+            <button class="btn sm" id="histDiffToggle">Show text diff</button>
+            <button class="btn sm" id="histDetailClose">Exit</button>
+          </div>
+          <div class="hd-meta" id="histDetailMeta"></div>
+          <pre id="histDiffPre" class="hidden"></pre>
+        </div>
+        <ul id="histList"></ul>
+        <div id="histEmpty" class="hidden">no commits touching the tracked files yet</div>
+        <button class="btn hidden" id="histMore">Load more</button>
+      </div>
     </section>
   </div>
 

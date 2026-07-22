@@ -60,6 +60,18 @@ export function diffSummary (diff) {
   return s
 }
 
+// One-line human summary of a structural diff — used to prefill the commit
+// message on save ("+2 tables, ~1 changed, -1 removed"). '' when nothing
+// structural changed (formatting/colors/notes only).
+export function diffSummaryLine (diff) {
+  const s = diffSummary(diff)
+  const parts = []
+  if (s.added.length) parts.push(`+${s.added.length} table${s.added.length === 1 ? '' : 's'}`)
+  if (s.modified.length) parts.push(`~${s.modified.length} changed`)
+  if (s.removed.length) parts.push(`-${s.removed.length} removed`)
+  return parts.join(', ')
+}
+
 // Render model for diff mode: target tables (with removed base columns spliced
 // back in as ghosts) plus ghost tables removed from base. Ghosts carry _removed.
 export function buildUnionModel (baseModel, targetModel, diff) {
