@@ -10,10 +10,25 @@ branch-to-branch diff. Edits are commits: saving the DBML or dragging tables aro
 an edit branch (`develop` by default), so the schema history is just git history. No database,
 no build step, one dependency (express).
 
-- Reads any git repo containing a DBML file (`GIT_REPO` — https URL or local path)
-- Bootstrap: if the repo lacks the base files/branches, Gabbro creates `master` + `develop`
-  with a starter DBML and an empty `positions.json` (add-only, never overwrites)
-- Table positions live in `positions.json`, separate from the schema — DBML diffs stay clean
+- **Schema as code** — the DBML file in git is the source of truth; every change is a commit
+- **Branches are environments** — keep `master` mirroring production and `develop` mirroring
+  the dev database, then diff them visually
+- **Layout out of the schema** — table positions live in `positions.json`, separate from the
+  DBML, so schema diffs stay clean and layout changes never pollute them
+
+## Features
+
+- **Diagram tab** — interactive ER diagram: pan/zoom, drag tables, colored table groups,
+  FK edges with orthogonal routing, hover highlight
+- **Docs tab** — browsable documentation: index by table group, search, per-table sections
+  with column types and PK/FK/NN/UQ badges, clickable "References" / "Referenced by"
+- **Branch selector** — view the schema of any branch of the data repo
+- **Structural diff** — pick base → target branches and see added (green), modified (yellow)
+  and removed (red ghost) tables/columns/FKs, in both the diagram and the docs
+- **View / Edit modes** — View is read-only for daily browsing; Edit opens a DBML editor and
+  enables saving positions, both committing to the edit branch
+- **Bootstrap** — pointed at a repo without the base files/branches, Gabbro creates `master` +
+  `develop` with a starter DBML and an empty `positions.json` (add-only, never overwrites)
 
 ## Quick start (local)
 
@@ -23,7 +38,13 @@ GIT_REPO=/path/to/your/dbml-repo DATA_DIR=./data npm start
 # open http://localhost:8080
 ```
 
-## Environment vars
+On Windows PowerShell:
+
+```powershell
+$env:GIT_REPO = "C:\path\to\your\dbml-repo"; $env:DATA_DIR = "./data"; npm start
+```
+
+## Environment variables
 
 | Var | Default | Description |
 |---|---|---|
@@ -41,14 +62,31 @@ GIT_REPO=/path/to/your/dbml-repo DATA_DIR=./data npm start
 
 | Endpoint | Description |
 |---|---|
-| `GET /api/health` | `{ok, repoCloned, lastFetch}` |
+| `GET /api/health` | `{ok, repoCloned, lastFetch}` — 503 if the repo init failed |
 | `GET /api/config` | `{dbmlFile, editBranch, repoName}` |
 | `GET /api/branches` | array of remote branch names |
-| `GET /api/dbml/:branch` | DBML content (text/plain) |
+| `GET /api/dbml/:branch` | DBML content (text/plain); 404 for unknown branch or file |
 | `GET /api/positions` | positions.json from the edit branch (empty default if missing) |
 | `PUT /api/dbml` | `{content, message?}` → commit + push to the edit branch |
 | `PUT /api/positions` | positions object → commit + push to the edit branch |
 | `POST /api/refresh` | force a git fetch |
+
+## Edit mode & branch policy
+
+Writes go **only** to the `EDIT_BRANCH` (`develop` by default) — the PUT endpoints take no
+branch parameter, so committing to any other branch is not possible through the app. Every
+other branch is read-only. Positions are also read from the edit branch regardless of the
+branch being viewed: layout is presentation, not schema, so all branches render with the
+same coordinates.
+
+> **Security: Gabbro has no authentication of its own.** Anyone with network access to the
+> app can read the schema and commit to the edit branch. Run it on an internal network, or
+> put it behind a reverse proxy that handles authentication (basic auth, OAuth proxy, VPN).
+> Do not expose it directly to the public internet with a write token configured.
+
+The `GIT_TOKEN` is passed via env; it is written to the clone's remote URL inside the
+container volume, and never logged. Use a token scoped to the data repo only, with the
+minimum role that allows pushing.
 
 ## Docker
 
@@ -60,9 +98,6 @@ docker run -d --name gabbro -p 8080:8080 \
   gabbro
 ```
 
-The token goes in via env; it is written to the clone's remote URL inside the container
-volume, and never logged.
-
 ## Deploy (Dokploy)
 
 Mode **Application (Dockerfile)**:
@@ -71,10 +106,16 @@ Mode **Application (Dockerfile)**:
 2. Set the env vars above (`GIT_REPO`, `GIT_TOKEN`, optionally `PORT`).
 3. In **Domains**, set **Container Port = `PORT`** (same value).
 
+The container has a HEALTHCHECK on `/api/health` (fails if the repo init failed). An
+optional volume on `DATA_DIR` (`/data`) keeps the clone across restarts; without it, the
+container re-clones on boot.
+
 > **Bad Gateway (502)?** Port mismatch: Dokploy's Container Port differs from `PORT`.
 > Align both — the port is internal to the container.
 
-## Seeding positions from StarUML
+## Utilities
+
+### Seeding positions from StarUML
 
 ```bash
 node scripts/mdj-to-positions.js --mdj Doc.mdj --out positions.json [--scale-x 1]
@@ -82,3 +123,7 @@ node scripts/mdj-to-positions.js --mdj Doc.mdj --out positions.json [--scale-x 1
 
 Extracts entity coordinates from a StarUML `.mdj` ERD into the `positions.json` schema, so a
 diagram that used to live in StarUML keeps its familiar layout.
+
+## License
+
+[MIT](LICENSE)
