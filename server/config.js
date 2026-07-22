@@ -60,13 +60,11 @@ module.exports = {
   repoPath: mode === 'local' ? path.resolve(gitRepo) : null,
   repoName: deriveName(gitRepo),
 
-  // Worktree the git commands run in: the user's own clone in local mode, the
-  // managed clone under DATA_DIR in hosted mode.
   repoDir () {
     return this.mode === 'local' ? this.repoPath : path.join(this.dataDir, 'repo')
   },
 
-  // Local-mode repo switch (PUT /api/repo). Caller validates the path has .git.
+  // Caller (PUT /api/repo) validates the path has .git.
   setRepo (p) {
     const abs = path.resolve(p)
     this.gitRepo = abs

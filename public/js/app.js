@@ -1,7 +1,3 @@
-// App orchestration: global state, toolbar, tabs, branch switching, view/edit
-// modes, diff mode, history mode, saves, local-mode chrome (sync, ahead/behind
-// badge, identity banner, repo switcher), toasts.
-
 import * as api from './api.js'
 import { parseDBML } from './parser.js'
 import { diffModels, diffSummaryLine, buildUnionModel } from './diff.js'
@@ -29,7 +25,6 @@ const state = {
   syncState: null
 }
 
-/* ---------- toast ---------- */
 let toastTimer = null
 function toast (msg, type) {
   const el = $('toast')
@@ -46,7 +41,6 @@ function warnToast (w) {
   toast(`push pending (${w.reason}): ${w.detail || ''}${w.fix ? ' — ' + w.fix : ''}`, 'warn')
 }
 
-/* ---------- data ---------- */
 const draftKey = b => 'gabbro:' + b
 
 async function ensureModel (b, force) {
@@ -78,7 +72,6 @@ function clearDrafts () {
   gone.forEach(k => localStorage.removeItem(k))
 }
 
-/* ---------- render ---------- */
 const isLocal = () => state.config && state.config.mode === 'local'
 // The only branch that accepts writes: local → the checked-out branch,
 // hosted → EDIT_BRANCH (v1 behavior untouched).
@@ -168,7 +161,6 @@ async function switchBranch (b) {
   await renderAll({ fitView: true })
 }
 
-/* ---------- history mode ---------- */
 async function openHistoryCommit (c) {
   try {
     if (state.diffOn) setDiffUi(false) // diff mode and history mode are mutually exclusive
@@ -196,7 +188,6 @@ function exitHistory () {
   renderAll({ fitView: false }).catch(fail)
 }
 
-/* ---------- toolbar wiring ---------- */
 function setTab (tab) {
   state.tab = tab
   localStorage.setItem('gabbro:tab', tab)
@@ -259,7 +250,6 @@ async function doRefresh () {
   } catch (e) { fail(e) } finally { btn.disabled = false }
 }
 
-/* ---------- saves ---------- */
 function saveFail (e) {
   if (e && e.status === 409) toast('branch changed underneath — reload the page', 'error')
   else fail(e)
@@ -309,7 +299,6 @@ async function savePositions () {
   } catch (e) { saveFail(e) }
 }
 
-/* ---------- local mode: sync + badge + repo switcher ---------- */
 function applySyncState (s) {
   if (!s) return
   state.syncState = s
@@ -416,6 +405,25 @@ function initRepoSwitcher () {
     if (p) switchRepo(p)
   })
   $('repoPath').addEventListener('keydown', e => { if (e.key === 'Enter') $('repoOpen').click() })
+  if (window.gabbroDesktop) {
+    $('repoBrowse').classList.remove('hidden')
+    $('repoBrowse').addEventListener('click', async () => {
+      const p = await window.gabbroDesktop.pickFolder()
+      if (p) switchRepo(p)
+    })
+  }
+}
+
+function initDesktopUpdates () {
+  if (!window.gabbroDesktop) return
+  window.gabbroDesktop.onUpdateStatus(s => {
+    if (s.state === 'downloaded') {
+      const b = $('updateBanner')
+      b.classList.remove('hidden')
+      $('updateBannerText').textContent = `Update ${s.version || ''} ready`
+    }
+  })
+  $('updateRestart').addEventListener('click', () => window.gabbroDesktop.installUpdate())
 }
 
 function setupLocalChrome () {
@@ -423,6 +431,7 @@ function setupLocalChrome () {
   $('btnSync').addEventListener('click', doSync)
   $('btnRefresh').title = 'Fetch latest from remote (read-only) — use Sync to integrate'
   initRepoSwitcher()
+  initDesktopUpdates()
   refreshSyncBadge()
   setInterval(refreshSyncBadge, 60000)
 }
@@ -435,7 +444,6 @@ function handleHash () {
   }
 }
 
-/* ---------- boot ---------- */
 async function boot () {
   diagram.initDiagram({ parse: parseDBML })
   initDocs()

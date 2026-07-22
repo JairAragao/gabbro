@@ -1,9 +1,6 @@
 // Frontend smoke checks, runnable in plain node (no browser):
 //   node scripts/smoke-front.mjs [path-to-large.dbml] [path-to-git-clone]
-// Validates parser.js (incl. increment/default/Indexes extensions), diff.js
-// (all six structural change kinds + summary line), history.js pure helpers,
-// and — when a git clone is given — the history flow (commit vs parent via
-// parseDBML+diffModels over real commits). All modules must stay DOM-free.
+// The modules exercised here must stay DOM-free.
 
 import { readFileSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
@@ -17,7 +14,6 @@ function check (name, cond, detail) {
   else { failures++; console.log(`  FAIL  ${name}${detail ? ' — ' + detail : ''}`) }
 }
 
-/* ---------- 1. large real-world DBML ---------- */
 const bigPath = process.argv[2]
 if (bigPath) {
   console.log(`\n[1] parse large DBML: ${bigPath}`)
@@ -42,7 +38,6 @@ if (bigPath) {
   console.log('\n[1] large DBML check skipped (no path argument)')
 }
 
-/* ---------- 2. structural diff — the six change kinds ---------- */
 console.log('\n[2] diffModels: six synthetic change kinds')
 const BASE = `
 Table users {
@@ -110,13 +105,11 @@ check('unchanged table is same (teams)', d.tables.teams.status === 'same')
 check('modified tables flagged', d.tables.users.status === 'modified' && d.tables.groups.status === 'modified')
 check('summary counts', s.added.length === 1 && s.removed.length === 1 && s.modified.length === 2, JSON.stringify(s))
 
-/* union model used by the diff rendering */
 const u = buildUnionModel(base, target, d)
 check('union keeps removed table as ghost', u.tables.legacy_stuff && u.tables.legacy_stuff._removed === true)
 check('union splices removed column back', u.tables.groups.columns.some(c => c.name === 'name' && c._removed))
 check('union preserves target order + ghosts', u.order.length === target.order.length + 1)
 
-/* parser extension details on the synthetic source */
 console.log('\n[3] parser extensions on synthetic source')
 check('increment parsed', base.tables.users.columns[0].increment === true)
 check('default parsed', base.tables.teams.columns[1].default === 'unnamed')
@@ -137,7 +130,6 @@ check('index name', mi.tables.t1.indexes[0].name === 't1_b_c_key')
 check('single index + unique flag', mi.tables.t1.indexes[1].cols[0] === 'b' && mi.tables.t1.indexes[1].unique === true)
 check('columns after Indexes block intact', mi.tables.t1.columns.length === 3)
 
-/* ---------- 4. history helpers: payload parse + summary line ---------- */
 console.log('\n[4] history payload parse + diff summary line')
 const payload = {
   commits: [
@@ -172,7 +164,6 @@ check('relativeTime bad date falls back', relativeTime('not-a-date', now) === 'n
 check('summary line +/~/-', diffSummaryLine(d) === '+1 table, ~2 changed, -1 removed', diffSummaryLine(d))
 check('summary line empty diff', diffSummaryLine(diffModels(base, base)) === '')
 
-/* ---------- 5. history flow over real commits (needs a clone path) ---------- */
 const repoPath = process.argv[3]
 if (repoPath) {
   console.log(`\n[5] history diff over real commits: ${repoPath}`)

@@ -1,12 +1,9 @@
 'use strict'
 
-// Local-mode git operations: the server works directly on the user's clone,
-// with the user's own identity, credentials and checked-out branch. Patterns
-// ported from basalt/server/git.js to plain execFile (no simple-git).
-//
-// Contract: commit is awaited (fast, local); push runs in background,
-// coalesced and best-effort — a push failure never breaks the local write, it
-// accumulates as a warning surfaced on the next response and in sync-state.
+// Local mode operates directly on the user's clone — their identity,
+// credentials and checked-out branch. Commit is awaited (fast, local); push
+// runs in background, coalesced and best-effort — a push failure never breaks
+// the local write, it accumulates as a warning surfaced on the next response.
 
 const fs = require('fs')
 const path = require('path')
@@ -17,9 +14,7 @@ function oneLine (s) {
   return String(s == null ? '' : s).replace(/\s+/g, ' ').trim()
 }
 
-// ── Identity ─────────────────────────────────────────────────────────────────
-// Effective user.name/user.email (local > global). null per missing field —
-// NEVER a hardcoded fallback (attribution must be real).
+// null per missing field — NEVER a hardcoded fallback (attribution must be real).
 async function getIdentity () {
   let name = null
   let email = null
@@ -39,9 +34,8 @@ async function ensureIdentity () {
   return id
 }
 
-// ── Branch state ─────────────────────────────────────────────────────────────
-// Checked-out branch name, or null when HEAD is detached. symbolic-ref (not
-// rev-parse) so an unborn branch in a fresh repo still resolves to its name.
+// null when HEAD is detached. symbolic-ref (not rev-parse) so an unborn branch
+// in a fresh repo still resolves to its name.
 async function currentBranch () {
   try {
     return (await git(['symbolic-ref', '--quiet', '--short', 'HEAD'])).trim() || null
@@ -62,7 +56,6 @@ async function currentHead () {
   }
 }
 
-// Dirty entries of the worktree, optionally scoped to specific files.
 async function dirtyStatus (files) {
   const args = ['status', '--porcelain']
   if (Array.isArray(files) && files.length) args.push('--', ...files)
@@ -73,7 +66,6 @@ async function dirtyStatus (files) {
   }))
 }
 
-// ── Failure classification ───────────────────────────────────────────────────
 function classifyReason (msg) {
   const m = String(msg || '').toLowerCase()
   if (/no remote|origin missing|origin ausente|does not appear to be a git repository|no tracking information|no upstream/.test(m)) return 'no-remote'
@@ -102,8 +94,7 @@ function isNonFastForward (msg) {
   return /non-fast-forward|fetch first|\[rejected\]|updates were rejected|tip of your current branch is behind|cannot lock ref|failed to push some refs/.test(m)
 }
 
-// ── Push / Pull ──────────────────────────────────────────────────────────────
-// pushNow: plain `git push`. NEVER throws — { ok } or { ok:false, reason, error }.
+// NEVER throws — { ok } or { ok:false, reason, error }.
 async function pushNow () {
   try {
     const remotes = (await git(['remote'])).split('\n').map(s => s.trim()).filter(Boolean)
@@ -116,9 +107,8 @@ async function pushNow () {
   }
 }
 
-// pullRebase: `git pull --rebase --autostash`. NEVER throws. GUARANTEE: the
-// worktree is never left mid-rebase — on error a best-effort `rebase --abort`
-// runs (swallowed when no rebase is in progress).
+// NEVER throws. GUARANTEE: the worktree is never left mid-rebase — on error a
+// best-effort `rebase --abort` runs (swallowed when no rebase is in progress).
 async function pullRebase () {
   try {
     const remotes = (await git(['remote'])).split('\n').map(s => s.trim()).filter(Boolean)
@@ -145,7 +135,7 @@ async function pullRebase () {
   }
 }
 
-// pushSync: push that SELF-HEALS on non-fast-forward — integrates the remote
+// Push that SELF-HEALS on non-fast-forward — integrates the remote
 // (pull --rebase --autostash) and retries, up to MAX times. NEVER throws.
 async function pushSync () {
   const MAX = 3
@@ -159,7 +149,6 @@ async function pushSync () {
   return { ok: false, reason: 'diverged', error: 'push rejected repeatedly: the remote keeps changing — try syncing again' }
 }
 
-// ── Background push (coalesced) ──────────────────────────────────────────────
 // One push in flight at a time; requests arriving meanwhile coalesce into a
 // single re-run. Failure is stored as the accumulated warning.
 let pushWarning = null
@@ -185,7 +174,6 @@ function pushBackground () {
     })
 }
 
-// ── Commit ───────────────────────────────────────────────────────────────────
 // Commits ONE file on the CURRENT branch with the user's identity. Serialized
 // on the same mutex as the hosted path (no two git writes race the index).
 // `expectedBranch` re-checks the client's branch inside the critical section
@@ -223,8 +211,6 @@ function commitFile (file, content, message, expectedBranch) {
   })
 }
 
-// ── Sync (explicit, the toolbar button) ──────────────────────────────────────
-// pull --rebase --autostash (guarded) then push with non-FF self-heal.
 function sync () {
   return serialize(async () => {
     const pr = await pullRebase()
@@ -236,8 +222,7 @@ function sync () {
   })
 }
 
-// ── Sync state (toolbar badge) ───────────────────────────────────────────────
-// ahead/behind vs upstream via rev-list --count. NEVER throws.
+// NEVER throws.
 async function syncState () {
   const branch = await currentBranch()
   let ahead = 0
@@ -254,13 +239,11 @@ async function syncState () {
   } catch {
     hasUpstream = false
   }
-  // dirty: uncommitted external changes on the tracked files (worktree banner)
   let dirty = []
   try { dirty = await dirtyStatus([cfg.dbmlFile, cfg.positionsFile]) } catch { /* never throws */ }
   return { branch, detached: branch === null, ahead, behind, hasUpstream, upstream, pushWarning, dirty }
 }
 
-// Repo switch (PUT /api/repo): drop state tied to the previous repo.
 function onRepoSwitch () {
   pushWarning = null
   pushQueued = false

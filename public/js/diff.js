@@ -1,6 +1,5 @@
-// Structural diff between two parsed DBML models — pure ESM, no DOM: runs in
-// browser and node. Compares structure only (type, pk, notnull, unique,
-// increment, default, fk); ignores colors, positions, notes and groups.
+// Pure ESM, no DOM: runs in browser and node. Compares structure only —
+// ignores colors, positions, notes and groups on purpose.
 
 const FIELDS = ['type', 'pk', 'notnull', 'unique', 'increment', 'default', 'fk']
 

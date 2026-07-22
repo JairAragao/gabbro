@@ -1,9 +1,5 @@
 'use strict'
 
-// ~/.gabbro/settings.json — persisted user preferences for local mode
-// (last opened repo + recents). Atomic write (tmp + rename) so a crash
-// mid-write never corrupts the file.
-
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
@@ -20,6 +16,7 @@ function read () {
   }
 }
 
+// tmp + rename so a crash mid-write never corrupts the file
 function write (obj) {
   fs.mkdirSync(SETTINGS_DIR, { recursive: true })
   const tmp = SETTINGS_FILE + '.tmp'
@@ -27,8 +24,6 @@ function write (obj) {
   fs.renameSync(tmp, SETTINGS_FILE)
 }
 
-// Records a repo as the last one opened and prepends it to the recents list
-// (deduped, capped at 10).
 function rememberRepo (repoPath) {
   const s = read()
   s.lastRepo = repoPath

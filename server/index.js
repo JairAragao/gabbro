@@ -164,7 +164,6 @@ app.post('/api/refresh', wrap(async (req, res) => {
   res.json({ ok: true, lastFetch: repo.state.lastFetch })
 }))
 
-// ── Local-mode sync and repo management ──────────────────────────────────────
 function localOnly (res) {
   if (cfg.mode !== 'local') {
     res.status(400).json({ error: 'this endpoint is local-mode only' })
@@ -173,8 +172,6 @@ function localOnly (res) {
   return true
 }
 
-// Explicit sync: pull --rebase --autostash (guarded) → push with non-FF
-// self-heal. Failures come back classified with a suggested fix.
 app.post('/api/sync', wrap(async (req, res) => {
   if (!localOnly(res)) return
   const r = await local.sync()
@@ -225,7 +222,6 @@ app.put('/api/repo', wrap(async (req, res) => {
   res.json({ ok: true, path: abs, repoName: cfg.repoName, currentBranch: await local.currentBranch() })
 }))
 
-// ── History ──────────────────────────────────────────────────────────────────
 // Only the two tracked files are inspectable — anything else is 400 (never a
 // free file-content oracle over the repo).
 function historyFile (q) {
@@ -238,8 +234,6 @@ function historyFile (q) {
   return q
 }
 
-// Resolves the ref the history walks: local → a local branch (default HEAD =
-// current branch); hosted → origin/<branch> (default edit branch).
 async function historyRef (branchQ) {
   if (cfg.mode === 'local') {
     if (!branchQ) return 'HEAD'
@@ -286,7 +280,6 @@ app.get('/api/commit/:hash', wrap(async (req, res) => {
   res.json({ content, parentContent, meta })
 }))
 
-// Unified text diff (secondary view).
 app.get('/api/commit/:hash/diff', wrap(async (req, res) => {
   const full = await repo.resolveCommit(req.params.hash)
   if (!full) return res.status(404).json({ error: 'commit not found' })
@@ -302,20 +295,27 @@ app.use((err, req, res, next) => {
   res.status(status).json({ error: repo.sanitize(err.message) })
 })
 
-// Local: bind loopback only (unauthenticated API must never reach the LAN).
-// Hosted: 0.0.0.0 as in v1 (Docker/Dokploy).
-const bindHost = cfg.mode === 'local' ? '127.0.0.1' : '0.0.0.0'
-const server = app.listen(cfg.port, bindHost, () => {
-  console.log(`gabbro (${cfg.mode}) listening on ${bindHost}:${cfg.port} — repo ${cfg.repoName}` +
-    (cfg.mode === 'hosted' ? `, edit branch ${cfg.editBranch}` : ''))
-})
-server.on('error', e => {
-  if (e.code === 'EADDRINUSE') {
-    console.error(`port ${cfg.port} is already in use — is another gabbro (or app) running on it?`)
-    process.exit(1)
-  }
-  throw e
-})
+// Auto-listen under plain node (CLI/`npm start`). Under Electron the main
+// process requires this module and controls the listen itself (free port,
+// 127.0.0.1) — basalt pattern.
+if (!process.versions.electron) {
+  // Local: bind loopback only (unauthenticated API must never reach the LAN).
+  // Hosted: 0.0.0.0 as in v1 (Docker/Dokploy).
+  const bindHost = cfg.mode === 'local' ? '127.0.0.1' : '0.0.0.0'
+  const server = app.listen(cfg.port, bindHost, () => {
+    console.log(`gabbro (${cfg.mode}) listening on ${bindHost}:${cfg.port} — repo ${cfg.repoName}` +
+      (cfg.mode === 'hosted' ? `, edit branch ${cfg.editBranch}` : ''))
+  })
+  server.on('error', e => {
+    if (e.code === 'EADDRINUSE') {
+      console.error(`port ${cfg.port} is already in use — is another gabbro (or app) running on it?`)
+      process.exit(1)
+    }
+    throw e
+  })
+}
+
+module.exports = app
 
 if (cfg.mode === 'local') {
   // Operate directly on the user's clone — no intermediate clone, no bootstrap,

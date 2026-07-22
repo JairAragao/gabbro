@@ -57,6 +57,7 @@
     <div id="repoNoRecents" class="rm-empty hidden">no other recent repos</div>
     <div class="rm-open">
       <input id="repoPath" placeholder="Path to a git clone&hellip;" autocomplete="off" spellcheck="false">
+      <button class="btn sm hidden" id="repoBrowse">Browse&hellip;</button>
       <button class="btn sm" id="repoOpen">Open</button>
     </div>
   </div>
@@ -65,6 +66,10 @@
     <div id="histBanner" class="bnr hist hidden">
       <span id="histBannerText"></span>
       <button id="histExit" class="bnr-btn">Exit</button>
+    </div>
+    <div id="updateBanner" class="bnr hist hidden">
+      <span id="updateBannerText"></span>
+      <button id="updateRestart" class="bnr-btn">Restart to update</button>
     </div>
     <div id="dirtyBanner" class="bnr warn hidden"></div>
     <div id="identityBanner" class="bnr hidden">

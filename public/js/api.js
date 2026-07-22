@@ -1,5 +1,3 @@
-// Thin fetch wrappers over the Gabbro server API.
-
 async function request (path, opts, attempt = 0) {
   let res
   try {
@@ -43,13 +41,11 @@ export const putPositions = (obj, branch) =>
   json('/api/positions', put(branch ? { ...obj, branch } : obj))
 export const refresh = () => json('/api/refresh', { method: 'POST' })
 
-/* ---------- local mode: sync + repo switching ---------- */
 export const sync = () => json('/api/sync', { method: 'POST' })
 export const getSyncState = () => json('/api/sync-state')
 export const getRepo = () => json('/api/repo')
 export const putRepo = path => json('/api/repo', put({ path }))
 
-/* ---------- history ---------- */
 export const getHistory = (skip, limit) =>
   json(`/api/history?skip=${skip | 0}&limit=${limit | 0}`)
 export const getCommit = hash => json(`/api/commit/${encodeURIComponent(hash)}`)

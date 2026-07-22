@@ -1,20 +1,65 @@
 {
   "name": "gabbro",
-  "version": "0.2.0",
-  "description": "Git-native DBML studio — diagram, docs and diff for your database schema, versioned in git",
+  "version": "0.3.0",
+  "description": "Git-native DBML studio — diagram, docs, diff and history for your database schema, straight from git",
   "license": "MIT",
   "author": "Jair Aragão",
-  "main": "server/index.js",
+  "repository": "github:JairAragao/gabbro",
+  "main": "electron/main.js",
   "bin": {
     "gabbro": "bin/gabbro.js"
   },
   "scripts": {
-    "start": "node server/index.js"
+    "start": "node server/index.js",
+    "electron": "electron .",
+    "electron:pack": "electron-builder --dir",
+    "electron:build": "electron-builder"
   },
   "engines": {
     "node": ">=24"
   },
   "dependencies": {
+    "electron-updater": "^6.8.9",
     "express": "^4.21.2"
+  },
+  "devDependencies": {
+    "electron": "^42.3.3",
+    "electron-builder": "^26.15.2"
+  },
+  "build": {
+    "appId": "br.com.ignitecore.gabbro",
+    "productName": "Gabbro",
+    "directories": {
+      "output": "release"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "JairAragao",
+        "repo": "gabbro",
+        "releaseType": "release"
+      }
+    ],
+    "files": [
+      "electron/**/*",
+      "server/**/*",
+      "public/**/*",
+      "bin/**/*",
+      "package.json",
+      "CHANGELOG.md"
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false
+    },
+    "mac": {
+      "target": "dmg"
+    },
+    "linux": {
+      "target": "AppImage",
+      "category": "Development"
+    }
   }
 }

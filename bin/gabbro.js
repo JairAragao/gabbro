@@ -1,11 +1,8 @@
 #!/usr/bin/env node
 'use strict'
 
-// gabbro [path] — local-first launcher. Resolves the repo (CLI arg > saved
-// lastRepo > env GIT_REPO), remembers it in ~/.gabbro/settings.json, starts
-// the server and opens the browser. If the port already answers as a running
-// gabbro, just opens the browser on that instance (two processes on the same
-// clone would race over the git index).
+// If the port already answers as a running gabbro, just open the browser on
+// that instance — two processes on the same clone would race over the git index.
 
 const fs = require('fs')
 const path = require('path')

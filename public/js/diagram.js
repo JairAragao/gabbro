@@ -1,8 +1,3 @@
-// Diagram: layout, render, edges (orthogonal A* routing), pan/zoom, drag,
-// hover focus, side editor with cached highlighting, color palette.
-// Ported from the original dbml-viewer and modularized: positions are injected
-// (API is the source of truth), diff decorations are driven by a diffResult.
-
 const TABLE_W = 248, HEADER_H = 34, ROW_H = 24, GAP = 34, GRP_PAD = 26, ROUTE_M = 14
 const SVGNS = 'http://www.w3.org/2000/svg'
 const $ = id => document.getElementById(id)
@@ -50,7 +45,6 @@ const tableHeight = t => HEADER_H + t.columns.length * ROW_H
 const colIndexPk = nm => { const i = model.tables[nm].columns.findIndex(c => c.pk); return i < 0 ? 0 : i }
 function groupOf (nm) { for (const g of model.groups) if (g.tables.includes(nm)) return g; return null }
 
-/* ---------- layout ---------- */
 function computeLayout () {
   positions = {}
   let cursorX = 0, rowY = 0, rowMaxH = 0; const MAX_COL_H = 1500, WRAP = 5200
@@ -86,7 +80,6 @@ function bboxOf (names) {
   return { x: a, y: b, w: c - a, h: d - b }
 }
 
-/* ---------- diff helpers ---------- */
 function tableDiff (name) { return diff ? diff.tables[name] : null }
 function colDiff (name, col) {
   if (!diff) return null
@@ -106,7 +99,6 @@ function edgeStatus (tableName, col) {
   return null
 }
 
-/* ---------- render ---------- */
 function render () {
   ;[...world.querySelectorAll('.tbl,.grp')].forEach(e => e.remove())
   while (svg.firstChild) svg.removeChild(svg.firstChild)
@@ -236,7 +228,6 @@ function positionGroups () {
 }
 function sizeSvg () { const b = bboxOf(model.order); svg.setAttribute('width', b.x + b.w + 600); svg.setAttribute('height', b.y + b.h + 600) }
 
-/* ---------- edge endpoints + orthogonal A* router (Hanan grid) ---------- */
 function endpointsOf (e) {
   const pf = positions[e.from], pt = positions[e.to]
   const cf = pf.x + TABLE_W / 2, ct = pt.x + TABLE_W / 2
@@ -408,7 +399,6 @@ function drawPath (e) {
 }
 function drawEdgesCheap (list) { for (const e of (list || edges)) { e.pts = routeCheap(e); drawPath(e) } }
 
-/* ---------- highlight + tooltip ---------- */
 // Single idempotent focus state: applyFocus(name) highlights, applyFocus(null)
 // clears. Avoids the flicker of paired on/off toggles racing during mouse sweeps.
 function applyFocus (name) {
@@ -447,7 +437,6 @@ function moveTip (e) {
   tip.style.left = x + 'px'; tip.style.top = y + 'px'
 }
 
-/* ---------- interaction ---------- */
 // rAF-coalesced: wheel/mousemove fire far more often than frames render, and
 // re-writing the transform of a huge layer per event causes tile flicker.
 let tfPending = false
@@ -518,7 +507,6 @@ export function fit () {
   tx = (vw - b.w * scale) / 2 - b.x * scale; ty = (vh - b.h * scale) / 2 - b.y * scale; applyTransform()
 }
 
-/* ---------- editor (side pane, edit mode) ---------- */
 let code, gutter, preHl, hlCode
 const HL_KW = new Set(['table', 'tablegroup', 'ref', 'enum', 'enums', 'indexes', 'project', 'note'])
 const HL_TY = new Set(['int', 'integer', 'tinyint', 'smallint', 'bigint', 'serial', 'bigserial', 'boolean', 'bool', 'text', 'varchar', 'char', 'character', 'timestamp', 'timestamptz', 'datetime', 'date', 'time', 'decimal', 'numeric', 'float', 'real', 'double', 'json', 'jsonb', 'uuid', 'vector', 'interval', 'bytea', 'money', 'blob', 'int4', 'int8', 'int2', 'float4', 'float8'])
@@ -578,7 +566,6 @@ function selectTableInEditor (name) {
   code.scrollTop = Math.max(0, (t.lineStart - 2) * lineH); syncGutter()
 }
 
-/* ---------- color palette (kebab on tables and groups) ---------- */
 const SWATCHES = ['#011B4E', '#0891B2', '#24BAB1', '#2ecc71', '#33FF57', '#16A34A', '#6724BB', '#8B5CF6', '#DE65C3', '#D96227', '#E4A62E', '#E5674F', '#3B82F6', '#0EA5E9', '#14B8A6', '#64748B', '#475569', '#222222']
 let palCtx = null
 function buildPalette () {
@@ -612,9 +599,6 @@ function applyColor (ctx, hex) {
   code.value = lines.join('\n'); highlight(); syncGutter(); reparseFromEditor()
 }
 
-/* ================================================================== *
- * PUBLIC API
- * ================================================================== */
 export function initDiagram (opts) {
   parseFn = opts.parse
   viewport = $('viewport'); world = $('world'); svg = $('svg'); tip = $('tip')
@@ -670,8 +654,6 @@ export function initDiagram (opts) {
   document.addEventListener('keydown', e => { if (e.key === 'Escape') closePalette() })
 }
 
-// positionsObj: API shape {version, tables:{name:{x,y}}}. diffResult: from
-// diffModels() over the same base/target used to build a union model, or null.
 export function loadModel (m, positionsObj, diffResult, opts) {
   opts = opts || {}
   model = m
@@ -714,7 +696,6 @@ export function setEditorText (text) {
 }
 export function getEditorText () { return code.value }
 
-// ranked search (tables and/or columns) with next/prev navigation
 let search = { key: '', list: [], idx: -1 }
 
 // tiers: table exact(0) > prefix(1) > substring(2) > column exact(3) > prefix(4) > substring(5)

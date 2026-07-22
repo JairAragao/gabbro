@@ -62,7 +62,6 @@ async function ensureClone () {
   state.lastFetch = Date.now()
 }
 
-// Local-mode init: no clone, just validate the worktree and mark ready.
 function initLocal () {
   if (!fs.existsSync(path.join(cfg.repoDir(), '.git'))) {
     throw new Error(`not a git repository (missing .git): ${cfg.repoDir()}`)
@@ -84,8 +83,8 @@ async function fetchIfStale (force) {
   state.lastFetch = Date.now()
 }
 
-// Local: the user's local branches (no origin/ prefix — what they can actually
-// check out and edit). Hosted: remote branches as in v1.
+// Local: the user's local branches (what they can actually check out and edit);
+// hosted: remote branches as in v1.
 async function listBranches () {
   if (cfg.mode === 'local') {
     const out = await git(['for-each-ref', '--format=%(refname:short)', 'refs/heads'])
@@ -246,10 +245,8 @@ async function doCommitPush (file, content, message) {
   return (await git(['rev-parse', 'HEAD'])).trim()
 }
 
-// ── History ──────────────────────────────────────────────────────────────────
-// logAll: paginated commit log of `ref`, filtered to the tracked files (or one
-// specific file). Field separator \x1f, record marker \x1e (never appear in
-// commit metadata). Asks for limit+1 to know hasMore without a separate count.
+// Field separator \x1f, record marker \x1e (never appear in commit metadata).
+// Asks for limit+1 to know hasMore without a separate count.
 async function logAll ({ skip = 0, limit = 30, file = null, ref = 'HEAD' } = {}) {
   const off = Math.max(0, Number(skip) || 0)
   const lim = Math.min(200, Math.max(1, Number(limit) || 30))
@@ -302,8 +299,6 @@ async function showAt (ref, file) {
   }
 }
 
-// Resolves any revision expression to a full commit SHA, '' when it does not
-// exist. Internal — takes git syntax like "<hash>^".
 async function resolveRev (expr) {
   try {
     return (await git(['rev-parse', '--verify', '--quiet', `${expr}^{commit}`])).trim() || ''
@@ -336,15 +331,12 @@ async function emptyTreeHash () {
   return _emptyTree
 }
 
-// Unified text diff of one file between a commit and its parent (empty tree
-// for the root commit).
 async function diffFile (hash, file) {
   let base = await resolveRev(`${hash}^`)
   if (!base) base = await emptyTreeHash()
   return git(['diff', base, hash, '--', file])
 }
 
-// Metadata of a single commit (for the /api/commit/:hash response).
 async function commitMeta (hash) {
   const FMT = '%H%x1f%h%x1f%aI%x1f%an%x1f%ae%x1f%s'
   const out = await git(['log', '-1', `--format=${FMT}`, hash])

@@ -1,19 +1,11 @@
-// History tab: paginated commit list of the two tracked files, plus a detail
-// panel for the commit being viewed (meta + collapsible unified text diff).
-// Opening a commit is delegated to app.js (enters "history mode" and renders
-// the structural diff in the Diagram/Docs tabs).
-//
-// Pure helpers (normalizeHistory, relativeTime) have no DOM dependency so the
-// smoke script can exercise them in plain node.
+// normalizeHistory/relativeTime have no DOM dependency so the smoke script can
+// exercise them in plain node.
 
 import * as api from './api.js'
 
 const PAGE = 30
 
-/* ---------- pure helpers (node-safe) ---------- */
-
-// Validates/normalizes a /api/history payload into {commits, hasMore} — every
-// commit is guaranteed the fields the list renders, whatever the server sent.
+// Every commit is guaranteed the fields the list renders, whatever the server sent.
 export function normalizeHistory (payload) {
   const raw = payload && Array.isArray(payload.commits) ? payload.commits : []
   const commits = raw
@@ -30,7 +22,6 @@ export function normalizeHistory (payload) {
   return { commits, hasMore: !!(payload && payload.hasMore) }
 }
 
-// "2h ago" style relative time; falls back to the raw string on bad dates.
 export function relativeTime (iso, now = Date.now()) {
   const t = new Date(iso).getTime()
   if (!Number.isFinite(t)) return String(iso || '')
@@ -55,8 +46,6 @@ export function absoluteTime (iso) {
 
 export const firstLine = msg => (msg || '').split('\n')[0] || '(no message)'
 
-/* ---------- DOM ---------- */
-
 const $ = id => document.getElementById(id)
 
 const state = {
@@ -78,13 +67,11 @@ export function initHistory (h) {
   $('histDiffToggle').addEventListener('click', () => toggleTextDiff().catch(hooks.fail))
 }
 
-// Called when the History tab is shown — loads the first page once.
 export async function ensureLoaded () {
   if (state.loaded || state.loading) return
   await reload()
 }
 
-// Marks the list stale without refetching — next tab open reloads it.
 export function invalidate () {
   state.loaded = false
   state.commits = []
@@ -94,7 +81,6 @@ export function invalidate () {
   if (list) list.innerHTML = ''
 }
 
-// Full reset + first page (refresh button, sync, repo switch).
 export async function reload () {
   state.commits = []
   state.skip = 0
@@ -180,9 +166,6 @@ function author (c) {
   return el
 }
 
-/* ---------- active commit + detail panel ---------- */
-
-// app.js calls this when entering/leaving history mode.
 export function setActive (commit) {
   state.activeHash = commit ? commit.hash : null
   markActive()
@@ -205,8 +188,6 @@ function markActive () {
     el.classList.toggle('on', !!state.activeHash && el.dataset.hash === state.activeHash)
   })
 }
-
-/* ---------- secondary view: unified text diff ---------- */
 
 function hideTextDiff () {
   $('histDiffPre').classList.add('hidden')

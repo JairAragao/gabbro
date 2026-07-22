@@ -1,6 +1,3 @@
-// Docs tab: sidebar index by TableGroup + searchable, one section per table
-// with columns, indexes, FK cross-references, and diff decorations.
-
 import { headerStyle, groupStyle } from './diagram.js'
 
 const $ = id => document.getElementById(id)
@@ -89,7 +86,6 @@ function renderContent () {
 
   if (diff) wrap.appendChild(buildDiffSummary())
 
-  // reverse FK index, computed once
   const refBy = {}
   for (const nm of model.order) {
     for (const c of model.tables[nm].columns) {

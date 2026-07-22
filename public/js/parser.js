@@ -1,6 +1,4 @@
 // DBML parser (subset) — pure ESM, no DOM references: runs in browser and node.
-// Ported from the original dbml-viewer, extended with: column `increment` and
-// `default`, and table `Indexes` blocks (composite uniques for the docs tab).
 
 export function parseDBML (src) {
   const tables = {}, order = [], groups = []
