@@ -1,129 +1,131 @@
 # Gabbro
 
-**Git-native DBML studio — diagram, docs and diff for your database schema, versioned in git.**
+**Estúdio DBML git-native — diagrama, documentação e diff do schema do seu banco, versionado no git.**
 
-## Why
+🌎 *Read this in [English](README.en.md).*
 
-Your database schema already lives in git as a [DBML](https://dbml.dbdiagram.io/docs) file —
-Gabbro turns that repo into a studio: interactive diagram, browsable documentation and
-branch-to-branch diff. Edits are commits: saving the DBML or dragging tables around pushes to
-an edit branch (`develop` by default), so the schema history is just git history. No database,
-no build step, one dependency (express).
+## Por quê
 
-- **Schema as code** — the DBML file in git is the source of truth; every change is a commit
-- **Branches are environments** — keep `master` mirroring production and `develop` mirroring
-  the dev database, then diff them visually
-- **Layout out of the schema** — table positions live in `positions.json`, separate from the
-  DBML, so schema diffs stay clean and layout changes never pollute them
+O schema do seu banco já vive no git como um arquivo [DBML](https://dbml.dbdiagram.io/docs) —
+o Gabbro transforma esse repo num estúdio: diagrama interativo, documentação navegável e diff
+entre branches. Edições viram commits: salvar o DBML ou arrastar tabelas commita numa branch de
+edição (`develop` por padrão), então o histórico do schema é simplesmente o histórico do git.
+Sem banco próprio, sem build step, uma dependência só (express).
 
-## Features
+- **Schema como código** — o arquivo DBML no git é a fonte da verdade; toda mudança é um commit
+- **Branches são ambientes** — mantenha a `master` espelhando produção e a `develop` espelhando
+  o banco de desenvolvimento, e compare as duas visualmente
+- **Layout fora do schema** — as posições das tabelas vivem no `positions.json`, separado do
+  DBML, então o diff do schema fica limpo e mudança de layout nunca polui o histórico
 
-- **Diagram tab** — interactive ER diagram: pan/zoom, drag tables, colored table groups,
-  FK edges with orthogonal routing, hover highlight
-- **Docs tab** — browsable documentation: index by table group, search, per-table sections
-  with column types and PK/FK/NN/UQ badges, clickable "References" / "Referenced by"
-- **Branch selector** — view the schema of any branch of the data repo
-- **Structural diff** — pick base → target branches and see added (green), modified (yellow)
-  and removed (red ghost) tables/columns/FKs, in both the diagram and the docs
-- **View / Edit modes** — View is read-only for daily browsing; Edit opens a DBML editor and
-  enables saving positions, both committing to the edit branch
-- **Bootstrap** — pointed at a repo without the base files/branches, Gabbro creates `master` +
-  `develop` with a starter DBML and an empty `positions.json` (add-only, never overwrites)
+## Funcionalidades
 
-## Quick start (local)
+- **Aba Diagram** — diagrama ER interativo: pan/zoom, arrastar tabelas, grupos coloridos,
+  arestas de FK com roteamento ortogonal, destaque de relações no hover
+- **Aba Docs** — documentação navegável: índice por grupo de tabelas, busca, seção por tabela
+  com tipos de coluna e badges PK/FK/NN/UQ, "References" / "Referenced by" clicáveis
+- **Seletor de branch** — veja o schema de qualquer branch do repo de dados
+- **Diff estrutural** — escolha base → target e veja tabelas/colunas/FKs adicionadas (verde),
+  modificadas (amarelo) e removidas (fantasma vermelho), no diagrama e na documentação
+- **Modos View / Edit** — View é somente leitura pro dia a dia; Edit abre o editor de DBML e
+  habilita salvar posições, ambos commitando na branch de edição
+- **Bootstrap** — apontado pra um repo sem os arquivos/branches base, o Gabbro cria `master` +
+  `develop` com um DBML inicial e um `positions.json` vazio (add-only, nunca sobrescreve)
+
+## Início rápido (local)
 
 ```bash
 npm install
-GIT_REPO=/path/to/your/dbml-repo DATA_DIR=./data npm start
-# open http://localhost:8080
+GIT_REPO=/caminho/do/seu/repo-dbml DATA_DIR=./data npm start
+# abra http://localhost:8080
 ```
 
-On Windows PowerShell:
+No Windows PowerShell:
 
 ```powershell
-$env:GIT_REPO = "C:\path\to\your\dbml-repo"; $env:DATA_DIR = "./data"; npm start
+$env:GIT_REPO = "C:\caminho\do\seu\repo-dbml"; $env:DATA_DIR = "./data"; npm start
 ```
 
-## Environment variables
+## Variáveis de ambiente
 
-| Var | Default | Description |
+| Var | Default | Descrição |
 |---|---|---|
-| `PORT` | `8080` | HTTP port |
-| `GIT_REPO` | — (required) | https URL or local filesystem path of the data repo |
-| `GIT_TOKEN` | — | write token for https repos (GitLab/GitHub); not needed for local paths |
-| `DBML_FILE` | `database.dbml` | DBML file name inside the repo |
-| `EDIT_BRANCH` | `develop` | branch that receives commits (other branches are read-only) |
-| `GIT_FETCH_TTL_MS` | `60000` | max age of the local fetch before refetching |
-| `DATA_DIR` | `/data` | where the clone lives (use `./data` for local dev) |
-| `GIT_USER_NAME` | `gabbro` | committer name |
-| `GIT_USER_EMAIL` | `gabbro@local` | committer email |
+| `PORT` | `8080` | porta HTTP |
+| `GIT_REPO` | — (obrigatória) | URL https ou caminho local do repo de dados |
+| `GIT_TOKEN` | — | token de escrita pra repos https (GitLab/GitHub); dispensável pra caminho local |
+| `DBML_FILE` | `database.dbml` | nome do arquivo DBML dentro do repo |
+| `EDIT_BRANCH` | `develop` | branch que recebe commits (as demais são somente leitura) |
+| `GIT_FETCH_TTL_MS` | `60000` | idade máxima do fetch local antes de refazer |
+| `DATA_DIR` | `/data` | onde o clone vive (use `./data` em dev local) |
+| `GIT_USER_NAME` | `gabbro` | nome do committer |
+| `GIT_USER_EMAIL` | `gabbro@local` | email do committer |
 
 ## API
 
-| Endpoint | Description |
+| Endpoint | Descrição |
 |---|---|
-| `GET /api/health` | `{ok, repoCloned, lastFetch}` — 503 if the repo init failed |
+| `GET /api/health` | `{ok, repoCloned, lastFetch}` — 503 se a inicialização do repo falhou |
 | `GET /api/config` | `{dbmlFile, editBranch, repoName}` |
-| `GET /api/branches` | array of remote branch names |
-| `GET /api/dbml/:branch` | DBML content (text/plain); 404 for unknown branch or file |
-| `GET /api/positions` | positions.json from the edit branch (empty default if missing) |
-| `PUT /api/dbml` | `{content, message?}` → commit + push to the edit branch |
-| `PUT /api/positions` | positions object → commit + push to the edit branch |
-| `POST /api/refresh` | force a git fetch |
+| `GET /api/branches` | array com os nomes das branches remotas |
+| `GET /api/dbml/:branch` | conteúdo do DBML (text/plain); 404 pra branch ou arquivo inexistente |
+| `GET /api/positions` | positions.json da branch de edição (default vazio se não existir) |
+| `PUT /api/dbml` | `{content, message?}` → commit + push na branch de edição |
+| `PUT /api/positions` | objeto de posições → commit + push na branch de edição |
+| `POST /api/refresh` | força um git fetch |
 
-## Edit mode & branch policy
+## Modo de edição e política de branches
 
-Writes go **only** to the `EDIT_BRANCH` (`develop` by default) — the PUT endpoints take no
-branch parameter, so committing to any other branch is not possible through the app. Every
-other branch is read-only. Positions are also read from the edit branch regardless of the
-branch being viewed: layout is presentation, not schema, so all branches render with the
-same coordinates.
+Escritas vão **somente** pra `EDIT_BRANCH` (`develop` por padrão) — os endpoints PUT não
+recebem parâmetro de branch, então commitar em qualquer outra branch é impossível pelo app.
+Todas as demais branches são somente leitura. As posições também são lidas da branch de edição
+independente da branch visualizada: layout é apresentação, não schema, então todas as branches
+renderizam com as mesmas coordenadas.
 
-> **Security: Gabbro has no authentication of its own.** Anyone with network access to the
-> app can read the schema and commit to the edit branch. Run it on an internal network, or
-> put it behind a reverse proxy that handles authentication (basic auth, OAuth proxy, VPN).
-> Do not expose it directly to the public internet with a write token configured.
+> **Segurança: o Gabbro não tem autenticação própria.** Qualquer pessoa com acesso de rede ao
+> app pode ler o schema e commitar na branch de edição. Rode em rede interna, ou coloque atrás
+> de um reverse proxy que faça a autenticação (basic auth, OAuth proxy, VPN). Não exponha
+> direto na internet pública com token de escrita configurado.
 
-The `GIT_TOKEN` is passed via env; it is written to the clone's remote URL inside the
-container volume, and never logged. Use a token scoped to the data repo only, with the
-minimum role that allows pushing.
+O `GIT_TOKEN` é passado via env; ele é gravado na URL do remote dentro do volume do container
+e nunca é logado. Use um token com escopo restrito ao repo de dados, com o papel mínimo que
+permita push.
 
 ## Docker
 
 ```bash
 docker build -t gabbro .
 docker run -d --name gabbro -p 8080:8080 \
-  -e GIT_REPO=https://gitlab.com/you/your-db-repo.git \
+  -e GIT_REPO=https://gitlab.com/voce/seu-repo-db.git \
   -e GIT_TOKEN=xxxx \
   gabbro
 ```
 
 ## Deploy (Dokploy)
 
-Mode **Application (Dockerfile)**:
+Modo **Application (Dockerfile)**:
 
-1. Source: this repo on GitHub, build type Dockerfile.
-2. Set the env vars above (`GIT_REPO`, `GIT_TOKEN`, optionally `PORT`).
-3. In **Domains**, set **Container Port = `PORT`** (same value).
+1. Source: este repo no GitHub, build type Dockerfile.
+2. Configure as envs acima (`GIT_REPO`, `GIT_TOKEN`, opcionalmente `PORT`).
+3. Em **Domains**, defina **Container Port = `PORT`** (mesmo valor).
 
-The container has a HEALTHCHECK on `/api/health` (fails if the repo init failed). An
-optional volume on `DATA_DIR` (`/data`) keeps the clone across restarts; without it, the
-container re-clones on boot.
+O container tem HEALTHCHECK em `/api/health` (falha se a inicialização do repo falhou). Um
+volume opcional em `DATA_DIR` (`/data`) preserva o clone entre restarts; sem ele, o container
+re-clona no boot.
 
-> **Bad Gateway (502)?** Port mismatch: Dokploy's Container Port differs from `PORT`.
-> Align both — the port is internal to the container.
+> **Bad Gateway (502)?** Porta desalinhada: o Container Port do Dokploy difere do `PORT`.
+> Alinhe os dois — a porta é interna ao container.
 
-## Utilities
+## Utilitários
 
-### Seeding positions from StarUML
+### Seed de posições a partir do StarUML
 
 ```bash
 node scripts/mdj-to-positions.js --mdj Doc.mdj --out positions.json [--scale-x 1]
 ```
 
-Extracts entity coordinates from a StarUML `.mdj` ERD into the `positions.json` schema, so a
-diagram that used to live in StarUML keeps its familiar layout.
+Extrai as coordenadas das entidades de um ERD StarUML (`.mdj`) pro schema do `positions.json`,
+pra um diagrama que vivia no StarUML manter o layout que a equipe já conhece.
 
-## License
+## Licença
 
 [MIT](LICENSE)
