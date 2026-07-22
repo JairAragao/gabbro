@@ -675,7 +675,13 @@ export function getEditorText () { return code.value }
 export function searchTable (q) {
   if (!model || !q) return false
   q = q.trim().toLowerCase(); if (!q) return false
-  const name = model.order.find(t => t.toLowerCase().includes(q))
+  // rank: exact > prefix > shortest substring match — "stock" must hit stock, not doc_item_stock
+  const lower = model.order.map(t => [t, t.toLowerCase()])
+  const name =
+    (lower.find(([, l]) => l === q) ||
+     lower.filter(([, l]) => l.startsWith(q)).sort((a, b) => a[1].length - b[1].length)[0] ||
+     lower.filter(([, l]) => l.includes(q)).sort((a, b) => a[1].length - b[1].length)[0] ||
+     [])[0]
   if (!name || !tableEls[name]) return false
   const p = positions[name], t = model.tables[name]; scale = 1
   tx = viewport.clientWidth / 2 - (p.x + TABLE_W / 2); ty = viewport.clientHeight / 2 - (p.y + tableHeight(t) / 2); applyTransform()
