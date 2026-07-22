@@ -102,7 +102,13 @@ html,body{margin:0;height:100%;background:var(--chrome);color:var(--text);overfl
     linear-gradient(90deg,var(--grid) 1px,transparent 1px) 0 0/28px 28px,
     radial-gradient(circle at 50% 35%, #313a4a, #272f3c 72%)}
 #viewport.grabbing{cursor:grabbing}
-#world{position:absolute;top:0;left:0;transform-origin:0 0;will-change:transform}
+/* no will-change: the world spans thousands of px — caching it as one GPU layer
+   overflows texture limits at zoom and makes tiles flicker/disappear */
+#world{position:absolute;top:0;left:0;transform-origin:0 0}
+.tbl{contain:layout paint}
+#world.far .tbl{box-shadow:none}
+#world.far .col > *{visibility:hidden}
+#world.far .tbl-hd .hd-actions{visibility:hidden}
 #svg{position:absolute;top:0;left:0;overflow:visible;pointer-events:none}
 
 .grp{position:absolute;border-style:solid;border-width:2px;border-radius:7px;pointer-events:none}

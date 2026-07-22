@@ -412,7 +412,20 @@ function moveTip (e) {
 }
 
 /* ---------- interaction ---------- */
-function applyTransform () { world.style.transform = `translate(${tx}px,${ty}px) scale(${scale})`; $('zlvl').textContent = Math.round(scale * 100) + '%' }
+// rAF-coalesced: wheel/mousemove fire far more often than frames render, and
+// re-writing the transform of a huge layer per event causes tile flicker.
+let tfPending = false
+function applyTransform () {
+  if (tfPending) return
+  tfPending = true
+  requestAnimationFrame(() => {
+    tfPending = false
+    world.style.transform = `translate(${tx}px,${ty}px) scale(${scale})`
+    // far mode: below 45% zoom column text/shadows are unreadable anyway — skip painting them
+    world.classList.toggle('far', scale < 0.45)
+    $('zlvl').textContent = Math.round(scale * 100) + '%'
+  })
+}
 function markDirty () {
   dirty = true
   if (posChangedCb) posChangedCb(getDirtyPositions())
