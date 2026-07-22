@@ -246,32 +246,18 @@ function endpointsOf (e) {
   return { a, b, aExit: { x: a.x + (sS === 'r' ? ROUTE_M : -ROUTE_M), y: a.y }, bExit: { x: b.x + (tS === 'r' ? ROUTE_M : -ROUTE_M), y: b.y } }
 }
 
-class MinHeap {
-  constructor () { this.a = [] }
-  size () { return this.a.length }
-  push (k, p) {
-    this.a.push({ k, p }); let i = this.a.length - 1
-    while (i > 0) { const j = (i - 1) >> 1; if (this.a[j].p <= this.a[i].p) break; [this.a[i], this.a[j]] = [this.a[j], this.a[i]]; i = j }
-  }
-  pop () {
-    const top = this.a[0], last = this.a.pop()
-    if (this.a.length) {
-      this.a[0] = last; let i = 0; const nn = this.a.length
-      for (;;) {
-        const l = 2 * i + 1, r = 2 * i + 2; let m = i
-        if (l < nn && this.a[l].p < this.a[m].p) m = l
-        if (r < nn && this.a[r].p < this.a[m].p) m = r
-        if (m === i) break; [this.a[i], this.a[m]] = [this.a[m], this.a[i]]; i = m
-      }
-    }
-    return top.k
-  }
-}
+function lowerBound (arr, v) { let lo = 0, hi = arr.length; while (lo < hi) { const m = (lo + hi) >> 1; if (arr[m] < v) lo = m + 1; else hi = m } return lo }
 
+/*
+ * Grid router: Hanan grid over table bounds (+margin), passability of every
+ * grid segment precomputed once per layout, then per-edge A* over typed arrays
+ * (epoch-stamped — no per-edge clearing). Scales to hundreds of tables where
+ * the old per-neighbor obstacle scan had to give up.
+ */
 function buildRouter () {
   const obs = model.order.map(nm => {
     const p = positions[nm], t = model.tables[nm]
-    return { name: nm, x1: p.x - ROUTE_M, y1: p.y - ROUTE_M, x2: p.x + TABLE_W + ROUTE_M, y2: p.y + tableHeight(t) + ROUTE_M }
+    return { x1: p.x - ROUTE_M, y1: p.y - ROUTE_M, x2: p.x + TABLE_W + ROUTE_M, y2: p.y + tableHeight(t) + ROUTE_M }
   })
   const xset = new Set(), yset = new Set()
   for (const o of obs) { xset.add(o.x1); xset.add(o.x2); yset.add(o.y1); yset.add(o.y2) }
@@ -281,43 +267,80 @@ function buildRouter () {
   }
   const xs = [...xset].sort((a, b) => a - b), ys = [...yset].sort((a, b) => a - b)
   const xi = new Map(xs.map((v, i) => [v, i])), yi = new Map(ys.map((v, i) => [v, i]))
-  const hBlk = (xa, xb, y, ig) => {
-    const lo = Math.min(xa, xb), hi = Math.max(xa, xb)
-    for (const o of obs) { if (ig && ig.has(o.name)) continue; if (y > o.y1 && y < o.y2 && Math.min(hi, o.x2) - Math.max(lo, o.x1) > 0.5) return true } return false
+  const W = xs.length, H = ys.length
+
+  // hPass[x*H+y]=1 → segment (x,y)→(x+1,y) crosses no table; vPass idem for (x,y)→(x,y+1)
+  const hPass = new Uint8Array(W * H).fill(1)
+  const vPass = new Uint8Array(W * H).fill(1)
+  for (const o of obs) {
+    const yLo = lowerBound(ys, o.y1 + 0.5), yHi = lowerBound(ys, o.y2 - 0.5)
+    const xSegLo = Math.max(0, lowerBound(xs, o.x1 + 0.5) - 1), xSegHi = Math.min(W - 1, lowerBound(xs, o.x2 - 0.5))
+    for (let y = yLo; y < yHi; y++) for (let x = xSegLo; x < xSegHi; x++) hPass[x * H + y] = 0
+    const xLo = lowerBound(xs, o.x1 + 0.5), xHi = lowerBound(xs, o.x2 - 0.5)
+    const ySegLo = Math.max(0, lowerBound(ys, o.y1 + 0.5) - 1), ySegHi = Math.min(H - 1, lowerBound(ys, o.y2 - 0.5))
+    for (let x = xLo; x < xHi; x++) for (let y = ySegLo; y < ySegHi; y++) vPass[x * H + y] = 0
   }
-  const vBlk = (x, ya, yb, ig) => {
-    const lo = Math.min(ya, yb), hi = Math.max(ya, yb)
-    for (const o of obs) { if (ig && ig.has(o.name)) continue; if (x > o.x1 && x < o.x2 && Math.min(hi, o.y2) - Math.max(lo, o.y1) > 0.5) return true } return false
+
+  const N = W * H * 2
+  return {
+    xs, ys, xi, yi, W, H, hPass, vPass,
+    g: new Float64Array(N), came: new Int32Array(N), stamp: new Int32Array(N), epoch: 0
   }
-  return { xs, ys, xi, yi, hBlk, vBlk, big: (xs.length > 170 || ys.length > 170) }
 }
+const TURN_COST = 30
 function routeAstar (e, R) {
-  const { xs, ys, xi, yi, hBlk, vBlk } = R
+  const { xs, ys, xi, yi, W, H, hPass, vPass, g, came, stamp } = R
   const sx = xi.get(e._ep.aExit.x), sy = yi.get(e._ep.a.y), gx = xi.get(e._ep.bExit.x), gy = yi.get(e._ep.b.y)
   if (sx == null || sy == null || gx == null || gy == null) return null
-  const W = xs.length, H = ys.length, ig = new Set([e.from, e.to])
-  const key = (x, y, d) => x * 100000 + y * 10 + d
-  const g = {}, came = {}, open = new MinHeap()
-  const hh = (x, y) => Math.abs(xs[x] - xs[gx]) + Math.abs(ys[y] - ys[gy])
-  const sk = key(sx, sy, 1); g[sk] = 0; open.push(sk, hh(sx, sy))
-  let found = null, iter = 0
-  while (open.size() && iter++ < 60000) {
-    const cur = open.pop(); const d = cur % 10, y = Math.floor(cur / 10) % 10000, x = Math.floor(cur / 100000)
+  const ep = ++R.epoch
+  const gxV = xs[gx], gyV = ys[gy]
+  const heapK = [], heapP = []
+  const push = (k, p) => {
+    let i = heapK.length; heapK.push(k); heapP.push(p)
+    while (i > 0) { const j = (i - 1) >> 1; if (heapP[j] <= heapP[i]) break; [heapK[i], heapK[j]] = [heapK[j], heapK[i]]; [heapP[i], heapP[j]] = [heapP[j], heapP[i]]; i = j }
+  }
+  const pop = () => {
+    const k = heapK[0], lk = heapK.pop(), lp = heapP.pop()
+    if (heapK.length) {
+      heapK[0] = lk; heapP[0] = lp; let i = 0
+      for (;;) {
+        const l = 2 * i + 1, r = l + 1; let m = i
+        if (l < heapK.length && heapP[l] < heapP[m]) m = l
+        if (r < heapK.length && heapP[r] < heapP[m]) m = r
+        if (m === i) break; [heapK[i], heapK[m]] = [heapK[m], heapK[i]]; [heapP[i], heapP[m]] = [heapP[m], heapP[i]]; i = m
+      }
+    }
+    return k
+  }
+  // node id = ((x*H)+y)*2 + dir (0=vertical, 1=horizontal)
+  for (let d = 0; d < 2; d++) {
+    const k = ((sx * H) + sy) * 2 + d
+    stamp[k] = ep; g[k] = 0; came[k] = -1
+    push(k, Math.abs(xs[sx] - gxV) + Math.abs(ys[sy] - gyV))
+  }
+  let found = -1, iter = 0
+  while (heapK.length && iter++ < 40000) {
+    const cur = pop()
+    const d = cur & 1, xy = cur >> 1, y = xy % H, x = (xy / H) | 0
     if (x === gx && y === gy) { found = cur; break }
     const gc = g[cur]
-    const nb = [[x - 1, y, 1], [x + 1, y, 1], [x, y - 1, 0], [x, y + 1, 0]]
-    for (const [nx, ny, nd] of nb) {
-      if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue
-      if (nd === 1) { if (hBlk(xs[x], xs[nx], ys[y], ig)) continue } else { if (vBlk(xs[x], ys[y], ys[ny], ig)) continue }
+    const tryStep = (nx, ny, nd) => {
       const dist = nd === 1 ? Math.abs(xs[nx] - xs[x]) : Math.abs(ys[ny] - ys[y])
-      const ng = gc + dist + (nd !== d ? 20 : 0)
-      const nk = key(nx, ny, nd)
-      if (g[nk] == null || ng < g[nk]) { g[nk] = ng; came[nk] = cur; open.push(nk, ng + hh(nx, ny)) }
+      const ng = gc + dist + (nd !== d ? TURN_COST : 0)
+      const nk = ((nx * H) + ny) * 2 + nd
+      if (stamp[nk] !== ep || ng < g[nk]) {
+        stamp[nk] = ep; g[nk] = ng; came[nk] = cur
+        push(nk, ng + Math.abs(xs[nx] - gxV) + Math.abs(ys[ny] - gyV))
+      }
     }
+    if (x > 0 && hPass[(x - 1) * H + y]) tryStep(x - 1, y, 1)
+    if (x < W - 1 && hPass[x * H + y]) tryStep(x + 1, y, 1)
+    if (y > 0 && vPass[x * H + (y - 1)]) tryStep(x, y - 1, 0)
+    if (y < H - 1 && vPass[x * H + y]) tryStep(x, y + 1, 0)
   }
-  if (found == null) return null
-  const pts = []; let c = found
-  while (c != null) { const y = Math.floor(c / 10) % 10000, x = Math.floor(c / 100000); pts.push({ x: xs[x], y: ys[y] }); c = came[c] }
+  if (found < 0) return null
+  const pts = []
+  for (let c = found; c >= 0; c = came[c]) { const xy = c >> 1; pts.push({ x: xs[(xy / H) | 0], y: ys[xy % H] }) }
   pts.reverse()
   return simplify([{ x: e._ep.a.x, y: e._ep.a.y }, ...pts, { x: e._ep.b.x, y: e._ep.b.y }])
 }
@@ -342,15 +365,28 @@ function simplify (pts) {
   }
   out.push(pts[pts.length - 1]); return out
 }
+// Progressive: cheap routes drawn immediately, then A* upgrades them in
+// ~12ms-per-frame batches so a 700-edge diagram never blocks the UI.
+let routeToken = 0
 function recomputeRoutes () {
-  let R = null
-  if (orthoAvoid) { try { R = buildRouter() } catch (e) { R = null } }
-  for (const e of edges) {
-    let pts = null
-    if (orthoAvoid && R && !R.big && e.from !== e.to) pts = routeAstar(e, R)
-    if (!pts) pts = routeCheap(e)
-    e.pts = pts; drawPath(e)
+  const token = ++routeToken
+  for (const e of edges) { e.pts = routeCheap(e); drawPath(e) }
+  if (!orthoAvoid || !edges.length) return
+  let R
+  try { R = buildRouter() } catch (err) { return }
+  const queue = edges.filter(e => e.from !== e.to)
+  let i = 0
+  const step = () => {
+    if (token !== routeToken) return
+    const t0 = performance.now()
+    while (i < queue.length && performance.now() - t0 < 12) {
+      const e = queue[i++]
+      const pts = routeAstar(e, R)
+      if (pts) { e.pts = pts; drawPath(e) }
+    }
+    if (i < queue.length) requestAnimationFrame(step)
   }
+  step()
 }
 function orthPath (pts, r) {
   r = r || 6; if (pts.length < 2) return ''
@@ -430,7 +466,12 @@ function markDirty () {
   dirty = true
   if (posChangedCb) posChangedCb(getDirtyPositions())
 }
+// View mode: positions cannot be saved there, so dragging is disabled entirely
+let draggable = false
+export function setDraggable (on) { draggable = on; world.classList.toggle('locked', !on) }
+
 function startTableDrag (e, name) {
+  if (!draggable) return
   e.stopPropagation(); e.preventDefault()
   dragging = true; clearTimeout(hoverTimer); applyFocus(null)
   const sx = e.clientX, sy = e.clientY, ox = positions[name].x, oy = positions[name].y
@@ -448,6 +489,7 @@ function startTableDrag (e, name) {
   window.addEventListener('mousemove', mv); window.addEventListener('mouseup', up)
 }
 function startGroupDrag (e, g) {
+  if (!draggable) return
   e.stopPropagation(); e.preventDefault()
   dragging = true; clearTimeout(hoverTimer); applyFocus(null)
   const mem = g.tables.filter(t => model.tables[t] && positions[t])
@@ -672,21 +714,38 @@ export function setEditorText (text) {
 }
 export function getEditorText () { return code.value }
 
-export function searchTable (q) {
-  if (!model || !q) return false
-  q = q.trim().toLowerCase(); if (!q) return false
-  // rank: exact > prefix > shortest substring match — "stock" must hit stock, not doc_item_stock
+// ranked search with next/prev navigation across all matches
+let search = { q: '', list: [], idx: -1 }
+
+function rankMatches (q) {
+  // exact > prefix (shortest first) > substring (shortest first) — "stock" hits stock, not doc_item_stock
   const lower = model.order.map(t => [t, t.toLowerCase()])
-  const name =
-    (lower.find(([, l]) => l === q) ||
-     lower.filter(([, l]) => l.startsWith(q)).sort((a, b) => a[1].length - b[1].length)[0] ||
-     lower.filter(([, l]) => l.includes(q)).sort((a, b) => a[1].length - b[1].length)[0] ||
-     [])[0]
-  if (!name || !tableEls[name]) return false
+  const exact = lower.filter(([, l]) => l === q)
+  const prefix = lower.filter(([, l]) => l !== q && l.startsWith(q)).sort((a, b) => a[1].length - b[1].length)
+  const sub = lower.filter(([, l]) => !l.startsWith(q) && l.includes(q)).sort((a, b) => a[1].length - b[1].length)
+  return [...exact, ...prefix, ...sub].map(([t]) => t)
+}
+
+function centerOn (name) {
+  if (!tableEls[name]) return
   const p = positions[name], t = model.tables[name]; scale = 1
   tx = viewport.clientWidth / 2 - (p.x + TABLE_W / 2); ty = viewport.clientHeight / 2 - (p.y + tableHeight(t) / 2); applyTransform()
   tableEls[name].classList.add('hl'); setTimeout(() => tableEls[name] && tableEls[name].classList.remove('hl'), 1200)
-  return true
+}
+
+export function searchTable (q) {
+  q = (q || '').trim().toLowerCase()
+  if (!model || !q) { search = { q: '', list: [], idx: -1 }; return { total: 0, idx: -1 } }
+  if (q !== search.q) search = { q, list: rankMatches(q), idx: 0 }
+  if (search.list.length) centerOn(search.list[search.idx])
+  return { total: search.list.length, idx: search.idx, name: search.list[search.idx] || null }
+}
+
+export function searchStep (dir) {
+  if (!search.list.length) return { total: 0, idx: -1 }
+  search.idx = (search.idx + dir + search.list.length) % search.list.length
+  centerOn(search.list[search.idx])
+  return { total: search.list.length, idx: search.idx, name: search.list[search.idx] }
 }
 
 export function getStats () {

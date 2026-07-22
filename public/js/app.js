@@ -75,6 +75,8 @@ function updateChrome () {
   $('modeEdit').classList.toggle('on', state.mode === 'edit')
   $('modeEdit').disabled = state.diffOn
   diagram.setEditorVisible(state.mode === 'edit' && !state.diffOn && state.tab === 'diagram')
+  // dragging only when the layout can actually be saved (edit mode on the edit branch)
+  diagram.setDraggable(canEdit())
 
   const editing = state.mode === 'edit' && !state.diffOn
   $('btnSaveDbml').hidden = !editing
@@ -128,7 +130,7 @@ function setTab (tab) {
   document.querySelectorAll('#tabs .tab').forEach(el => el.classList.toggle('on', el.dataset.tab === tab))
   $('diagramSection').classList.toggle('hidden', tab !== 'diagram')
   $('docsSection').classList.toggle('hidden', tab !== 'docs')
-  $('search').classList.toggle('hidden', tab !== 'diagram')
+  $('searchWrap').classList.toggle('hidden', tab !== 'diagram')
   updateChrome()
 }
 
@@ -246,8 +248,23 @@ async function boot () {
   })
   $('btnSaveDbml').addEventListener('click', saveDbml)
   $('btnSavePos').addEventListener('click', savePositions)
-  $('search').addEventListener('keydown', e => { if (e.key === 'Enter') diagram.searchTable(e.target.value) })
-  $('search').addEventListener('input', e => { if (e.target.value.length > 2) diagram.searchTable(e.target.value) })
+  const searchUi = r => {
+    const has = r && r.total > 0
+    $('searchCount').textContent = has ? `${r.idx + 1}/${r.total}` : ($('search').value.trim() ? '0' : '')
+    $('searchCount').classList.toggle('hidden', !$('search').value.trim())
+    $('searchPrev').classList.toggle('hidden', !has || r.total < 2)
+    $('searchNext').classList.toggle('hidden', !has || r.total < 2)
+  }
+  $('search').addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      let r = diagram.searchStep(e.shiftKey ? -1 : 1)
+      if (!r.total) r = diagram.searchTable(e.target.value)
+      searchUi(r)
+    } else if (e.key === 'Escape') { e.target.value = ''; diagram.searchTable(''); searchUi(null) }
+  })
+  $('search').addEventListener('input', e => searchUi(diagram.searchTable(e.target.value)))
+  $('searchPrev').addEventListener('click', () => searchUi(diagram.searchStep(-1)))
+  $('searchNext').addEventListener('click', () => searchUi(diagram.searchStep(1)))
   window.addEventListener('hashchange', handleHash)
 
   try {

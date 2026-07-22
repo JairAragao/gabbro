@@ -132,6 +132,7 @@ function renderContent () {
         nameCell += ` <span class="diff-changes" title="${esc(chDesc)}">${esc(chDesc)}</span>`
       }
       if (c.fk) typeCell += ` <span class="doc-fkref">→ <a href="#tbl-${encodeURIComponent(c.fk.table)}">${esc(c.fk.table)}.${esc(c.fk.col)}</a></span>`
+      if (c.note) nameCell += `<div class="c-note">${esc(c.note)}</div>`
       html += `<tr${cls}><td class="c-name">${nameCell}</td><td class="c-type">${typeCell}</td><td class="c-attrs">${attrs}</td><td class="c-def">${c.default != null ? esc(c.default) : ''}</td></tr>`
     }
     html += '</tbody></table>'

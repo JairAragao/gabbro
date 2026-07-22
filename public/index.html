@@ -26,7 +26,12 @@
     </span>
     <span class="meta" id="meta"></span>
     <span class="spacer"></span>
-    <input id="search" placeholder="Search table&hellip;" autocomplete="off">
+    <div id="searchWrap">
+      <input id="search" placeholder="Search table&hellip;" autocomplete="off" title="Enter = next match, Shift+Enter = previous">
+      <span id="searchCount" class="hidden"></span>
+      <button id="searchPrev" class="search-nav hidden" title="Previous match (Shift+Enter)">‹</button>
+      <button id="searchNext" class="search-nav hidden" title="Next match (Enter)">›</button>
+    </div>
     <div id="modeToggle">
       <button id="modeView" class="on">View</button>
       <button id="modeEdit">Edit</button>
