@@ -84,7 +84,13 @@ async function fetchIfStale (force) {
   state.lastFetch = Date.now()
 }
 
+// Local: the user's local branches (no origin/ prefix — what they can actually
+// check out and edit). Hosted: remote branches as in v1.
 async function listBranches () {
+  if (cfg.mode === 'local') {
+    const out = await git(['for-each-ref', '--format=%(refname:short)', 'refs/heads'])
+    return out.split('\n').map(b => b.trim()).filter(Boolean)
+  }
   const out = await git(['for-each-ref', '--format=%(refname:strip=3)', 'refs/remotes/origin'])
   return out.split('\n').map(b => b.trim()).filter(b => b && b !== 'HEAD')
 }
@@ -105,6 +111,19 @@ async function showFile (branch, file) {
   }
   const branches = await listBranches()
   if (!branches.includes(branch)) return null
+  if (cfg.mode === 'local') {
+    // Current branch reads straight from the worktree (shows the user's real
+    // state, including uncommitted edits); other local branches via git show.
+    const cur = await require('./local').currentBranch()
+    if (branch === cur) {
+      try {
+        return fs.readFileSync(path.join(cfg.repoDir(), file), 'utf8')
+      } catch {
+        return null
+      }
+    }
+    return showFileRaw(`refs/heads/${branch}`, file)
+  }
   return showFileRaw(`origin/${branch}`, file)
 }
 
@@ -176,14 +195,21 @@ async function bootstrap () {
   await fetchIfStale(true)
 }
 
-// In-memory mutex: concurrent PUTs are serialized into a promise queue so two
-// commits never race over the same worktree.
+// In-memory mutex: concurrent git writes (hosted PUTs, local commits and sync)
+// are serialized into a promise queue so two operations never race over the
+// same worktree/index.
 let lock = Promise.resolve()
 
-function commitPushFile (file, content, message) {
-  const job = lock.then(() => doCommitPush(file, content, message))
+function serialize (fn) {
+  const job = lock.then(fn)
   lock = job.catch(() => {})
   return job
+}
+
+// Hosted-only write path: rebuilds the edit branch from origin and pushes with
+// the service identity. Local mode commits via local.commitFile instead.
+function commitPushFile (file, content, message) {
+  return serialize(() => doCommitPush(file, content, message))
 }
 
 async function doCommitPush (file, content, message) {
@@ -230,5 +256,6 @@ module.exports = {
   fetchIfStale,
   listBranches,
   showFile,
+  serialize,
   commitPushFile
 }

@@ -1,10 +1,12 @@
 'use strict'
 
+const fs = require('fs')
 const path = require('path')
 const express = require('express')
 const cfg = require('./config')
 const repo = require('./git')
 const local = require('./local')
+const settings = require('./settings')
 
 const app = express()
 app.use(express.json({ limit: '10mb' }))
@@ -74,14 +76,37 @@ app.get('/api/dbml/:branch', wrap(async (req, res) => {
   res.type('text/plain').send(content)
 }))
 
-// Positions always come from the edit branch: layout is presentation, not
-// schema — every branch renders with the same coordinates.
+// Positions are presentation, not schema. Hosted: always from the edit branch
+// (every branch renders with the same coordinates). Local: straight from the
+// worktree of the current branch.
 app.get('/api/positions', wrap(async (req, res) => {
+  if (cfg.mode === 'local') {
+    let content = null
+    try {
+      content = fs.readFileSync(path.join(cfg.repoDir(), cfg.positionsFile), 'utf8')
+    } catch {
+      content = null
+    }
+    if (content === null) return res.json({ version: 1, tables: {} })
+    return res.type('application/json').send(content)
+  }
   await repo.fetchIfStale(false)
   const content = await repo.showFile(cfg.editBranch, cfg.positionsFile)
   if (content === null) return res.json({ version: 1, tables: {} })
   res.type('application/json').send(content)
 }))
+
+// Local writes require the client to say WHICH branch it is editing — the
+// commit lands on the current branch only, 409 if the client is stale.
+function requireBranch (body) {
+  const b = body && body.branch
+  if (typeof b !== 'string' || !b.trim()) {
+    const e = new Error('body must include branch (the branch being edited)')
+    e.status = 400
+    throw e
+  }
+  return b.trim()
+}
 
 app.put('/api/dbml', wrap(async (req, res) => {
   const { content, message } = req.body || {}
@@ -91,6 +116,11 @@ app.put('/api/dbml', wrap(async (req, res) => {
   const msg = typeof message === 'string' && message.trim()
     ? message.replace(/\s+/g, ' ').trim().slice(0, 200)
     : 'update via gabbro'
+  if (cfg.mode === 'local') {
+    const branch = requireBranch(req.body)
+    const r = await local.commitFile(cfg.dbmlFile, content, `docs(dbml): ${msg}`, branch)
+    return res.json({ ok: true, branch: r.branch, commit: r.commit, warning: r.warning })
+  }
   const commit = await repo.commitPushFile(cfg.dbmlFile, content, `docs(dbml): ${msg}`)
   res.json({ ok: true, branch: cfg.editBranch, commit })
 }))
@@ -107,15 +137,78 @@ app.put('/api/positions', wrap(async (req, res) => {
   if (badShape) {
     return res.status(400).json({ error: 'body must be {version: number, tables: {name: {x: number, y: number}}}' })
   }
+  const branch = cfg.mode === 'local' ? requireBranch(req.body) : null
+  delete p.branch // transport-only field — must never land in the committed file
   p.updated_at = new Date().toISOString()
-  const commit = await repo.commitPushFile(
-    cfg.positionsFile, JSON.stringify(p, null, 2) + '\n', 'chore(positions): update via gabbro')
+  const json = JSON.stringify(p, null, 2) + '\n'
+  if (cfg.mode === 'local') {
+    const r = await local.commitFile(cfg.positionsFile, json, 'chore(positions): update via gabbro', branch)
+    return res.json({ ok: true, branch: r.branch, commit: r.commit, warning: r.warning })
+  }
+  const commit = await repo.commitPushFile(cfg.positionsFile, json, 'chore(positions): update via gabbro')
   res.json({ ok: true, branch: cfg.editBranch, commit })
 }))
 
 app.post('/api/refresh', wrap(async (req, res) => {
   await repo.fetchIfStale(true)
   res.json({ ok: true, lastFetch: repo.state.lastFetch })
+}))
+
+// ── Local-mode sync and repo management ──────────────────────────────────────
+function localOnly (res) {
+  if (cfg.mode !== 'local') {
+    res.status(400).json({ error: 'this endpoint is local-mode only' })
+    return false
+  }
+  return true
+}
+
+// Explicit sync: pull --rebase --autostash (guarded) → push with non-FF
+// self-heal. Failures come back classified with a suggested fix.
+app.post('/api/sync', wrap(async (req, res) => {
+  if (!localOnly(res)) return
+  const r = await local.sync()
+  repo.state.lastFetch = Date.now()
+  res.json({ ...r, syncState: await local.syncState() })
+}))
+
+app.get('/api/sync-state', wrap(async (req, res) => {
+  if (!localOnly(res)) return
+  await repo.fetchIfStale(false) // best-effort in local mode (never throws)
+  res.json(await local.syncState())
+}))
+
+app.get('/api/repo', (req, res) => {
+  const s = settings.read()
+  res.json({
+    mode: cfg.mode,
+    path: cfg.mode === 'local' ? cfg.repoDir() : null,
+    repoName: cfg.repoName,
+    recents: Array.isArray(s.recentRepos) ? s.recentRepos.filter(p => typeof p === 'string') : []
+  })
+})
+
+// Switch the local instance to another clone. The path must be an existing
+// git worktree — no cloning, gabbro only ever operates on repos the user has.
+app.put('/api/repo', wrap(async (req, res) => {
+  if (!localOnly(res)) return
+  const p = req.body && req.body.path
+  if (typeof p !== 'string' || !p.trim()) {
+    return res.status(400).json({ error: 'body must be {path: string}' })
+  }
+  const abs = path.resolve(p.trim())
+  if (!fs.existsSync(path.join(abs, '.git'))) {
+    return res.status(400).json({ error: `not a git repository (missing .git): ${abs}` })
+  }
+  // Serialized so the switch never lands mid-commit of the previous repo.
+  await repo.serialize(async () => {
+    cfg.setRepo(abs)
+    local.onRepoSwitch()
+    repo.state.lastFetch = 0
+    repo.state.initError = null
+    settings.rememberRepo(abs)
+  })
+  res.json({ ok: true, path: abs, repoName: cfg.repoName, currentBranch: await local.currentBranch() })
 }))
 
 app.use(express.static(path.join(__dirname, '..', 'public')))
