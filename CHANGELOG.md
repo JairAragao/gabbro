@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.3.0 — 2026-07-22
+
+App desktop.
+
+- **Electron** — instalável Windows (NSIS; Mac/Linux configurados no build). O main sobe o
+  backend numa porta livre em 127.0.0.1 e abre a janela na mesma origem. Primeira execução
+  sem repo salvo abre o seletor nativo de pasta.
+- **Auto-update** — `electron-updater` lendo o GitHub Releases do repo (público, sem token):
+  checa no boot e a cada 3h, baixa em background e mostra banner "Restart to update";
+  instalação silenciosa no restart.
+- **Picker nativo** — botão Browse… no repo switcher quando rodando no desktop.
+- Limpeza de comentários no código (só o não-óbvio fica).
+
 ## 0.2.0 — 2026-07-22
 
 Local-first release: Gabbro agora roda na máquina de cada pessoa, apontado pro clone dela.
