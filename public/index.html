@@ -27,7 +27,12 @@
     <span class="meta" id="meta"></span>
     <span class="spacer"></span>
     <div id="searchWrap">
-      <input id="search" placeholder="Search table&hellip;" autocomplete="off" title="Enter = next match, Shift+Enter = previous">
+      <select id="searchScope" title="Search scope">
+        <option value="all" selected>All</option>
+        <option value="tables">Tables</option>
+        <option value="columns">Columns</option>
+      </select>
+      <input id="search" placeholder="Search&hellip;" autocomplete="off" title="Enter = next match, Shift+Enter = previous">
       <span id="searchCount" class="hidden"></span>
       <button id="searchPrev" class="search-nav hidden" title="Previous match (Shift+Enter)">‹</button>
       <button id="searchNext" class="search-nav hidden" title="Next match (Enter)">›</button>

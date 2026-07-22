@@ -255,14 +255,16 @@ async function boot () {
     $('searchPrev').classList.toggle('hidden', !has || r.total < 2)
     $('searchNext').classList.toggle('hidden', !has || r.total < 2)
   }
+  const scope = () => $('searchScope').value
   $('search').addEventListener('keydown', e => {
     if (e.key === 'Enter') {
       let r = diagram.searchStep(e.shiftKey ? -1 : 1)
-      if (!r.total) r = diagram.searchTable(e.target.value)
+      if (!r.total) r = diagram.searchTable(e.target.value, scope())
       searchUi(r)
     } else if (e.key === 'Escape') { e.target.value = ''; diagram.searchTable(''); searchUi(null) }
   })
-  $('search').addEventListener('input', e => searchUi(diagram.searchTable(e.target.value)))
+  $('search').addEventListener('input', e => searchUi(diagram.searchTable(e.target.value, scope())))
+  $('searchScope').addEventListener('change', () => searchUi(diagram.searchTable($('search').value, scope())))
   $('searchPrev').addEventListener('click', () => searchUi(diagram.searchStep(-1)))
   $('searchNext').addEventListener('click', () => searchUi(diagram.searchStep(1)))
   window.addEventListener('hashchange', handleHash)

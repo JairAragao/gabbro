@@ -714,38 +714,61 @@ export function setEditorText (text) {
 }
 export function getEditorText () { return code.value }
 
-// ranked search with next/prev navigation across all matches
-let search = { q: '', list: [], idx: -1 }
+// ranked search (tables and/or columns) with next/prev navigation
+let search = { key: '', list: [], idx: -1 }
 
-function rankMatches (q) {
-  // exact > prefix (shortest first) > substring (shortest first) — "stock" hits stock, not doc_item_stock
-  const lower = model.order.map(t => [t, t.toLowerCase()])
-  const exact = lower.filter(([, l]) => l === q)
-  const prefix = lower.filter(([, l]) => l !== q && l.startsWith(q)).sort((a, b) => a[1].length - b[1].length)
-  const sub = lower.filter(([, l]) => !l.startsWith(q) && l.includes(q)).sort((a, b) => a[1].length - b[1].length)
-  return [...exact, ...prefix, ...sub].map(([t]) => t)
+// tiers: table exact(0) > prefix(1) > substring(2) > column exact(3) > prefix(4) > substring(5)
+function matchTier (l, q) { return l === q ? 0 : l.startsWith(q) ? 1 : l.includes(q) ? 2 : -1 }
+function rankMatches (q, scope) {
+  const out = []
+  for (const t of model.order) {
+    if (scope !== 'columns') {
+      const tier = matchTier(t.toLowerCase(), q)
+      if (tier >= 0) { out.push({ t, c: null, tier, len: t.length }); continue }
+    }
+    if (scope !== 'tables') {
+      let best = null
+      for (const c of model.tables[t].columns) {
+        const tier = matchTier(c.name.toLowerCase(), q)
+        if (tier >= 0 && (!best || tier < best.tier || (tier === best.tier && c.name.length < best.len))) {
+          best = { t, c: c.name, tier: tier + 3, len: c.name.length }
+        }
+      }
+      if (best) out.push(best)
+    }
+  }
+  return out.sort((a, b) => a.tier - b.tier || a.len - b.len || a.t.localeCompare(b.t))
 }
 
-function centerOn (name) {
+function centerOn (m) {
+  const name = m.t
   if (!tableEls[name]) return
   const p = positions[name], t = model.tables[name]; scale = 1
   tx = viewport.clientWidth / 2 - (p.x + TABLE_W / 2); ty = viewport.clientHeight / 2 - (p.y + tableHeight(t) / 2); applyTransform()
   tableEls[name].classList.add('hl'); setTimeout(() => tableEls[name] && tableEls[name].classList.remove('hl'), 1200)
+  if (m.c) {
+    const idx = t.columns.findIndex(c => c.name === m.c)
+    const row = idx >= 0 && tableEls[name].querySelectorAll('.col')[idx]
+    if (row) { row.classList.add('find-flash'); setTimeout(() => row.classList.remove('find-flash'), 1600) }
+  }
 }
 
-export function searchTable (q) {
+export function searchTable (q, scope = 'all') {
   q = (q || '').trim().toLowerCase()
-  if (!model || !q) { search = { q: '', list: [], idx: -1 }; return { total: 0, idx: -1 } }
-  if (q !== search.q) search = { q, list: rankMatches(q), idx: 0 }
+  if (!model || !q) { search = { key: '', list: [], idx: -1 }; return { total: 0, idx: -1 } }
+  const key = scope + '|' + q
+  if (key !== search.key) search = { key, list: rankMatches(q, scope), idx: 0 }
   if (search.list.length) centerOn(search.list[search.idx])
-  return { total: search.list.length, idx: search.idx, name: search.list[search.idx] || null }
+  const m = search.list[search.idx] || null
+  return { total: search.list.length, idx: search.idx, name: m && m.t, col: m && m.c }
 }
 
 export function searchStep (dir) {
   if (!search.list.length) return { total: 0, idx: -1 }
   search.idx = (search.idx + dir + search.list.length) % search.list.length
   centerOn(search.list[search.idx])
-  return { total: search.list.length, idx: search.idx, name: search.list[search.idx] }
+  const m = search.list[search.idx]
+  return { total: search.list.length, idx: search.idx, name: m.t, col: m.c }
 }
 
 export function getStats () {
