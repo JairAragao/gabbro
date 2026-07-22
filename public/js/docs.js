@@ -124,7 +124,7 @@ function renderContent () {
       if (c.fk) attrs += `<a class="badge fk" href="#tbl-${encodeURIComponent(c.fk.table)}" title="References ${esc(c.fk.table)}.${esc(c.fk.col)}">FK</a>`
       if (c.notnull) attrs += badge('nn', 'NN', 'Not null')
       if (c.unique) attrs += badge('uq', 'UQ', 'Unique')
-      if (c.increment) attrs += badge('ai', 'AI', 'Auto increment')
+      if (c.increment) attrs += badge('ai', 'AUTO', 'Auto increment (serial/sequence)')
       let typeCell = esc(c.type)
       let nameCell = esc(c.name)
       if (cs && cs.status === 'modified') {
