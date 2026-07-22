@@ -25,6 +25,8 @@ function filterIndex (q) {
   for (const sec of $('docsIndex').querySelectorAll('.doc-idx-group')) {
     const any = [...sec.querySelectorAll('.doc-idx-item')].some(i => !i.classList.contains('hidden'))
     sec.classList.toggle('hidden', !any)
+    // searching overrides the collapsed state so matches are always visible
+    sec.classList.toggle('search-open', !!q && any)
   }
 }
 
@@ -59,9 +61,10 @@ function renderIndex () {
   const grouped = new Set()
   const addGroup = (title, color, names) => {
     if (!names.length) return
-    const sec = document.createElement('div'); sec.className = 'doc-idx-group'
+    const sec = document.createElement('div'); sec.className = 'doc-idx-group collapsed'
     const gs = groupStyle(color)
-    sec.innerHTML = `<div class="doc-idx-head"><span class="doc-idx-dot" style="background:${gs.labelBg}"></span>${esc(title)}</div>`
+    sec.innerHTML = `<div class="doc-idx-head"><span class="doc-idx-chev">▸</span><span class="doc-idx-dot" style="background:${gs.labelBg}"></span>${esc(title)}<span class="doc-idx-count">${names.length}</span></div>`
+    sec.firstChild.addEventListener('click', () => sec.classList.toggle('collapsed'))
     for (const nm of names) {
       const a = document.createElement('a')
       a.className = 'doc-idx-item'; a.dataset.table = nm; a.href = '#tbl-' + encodeURIComponent(nm)

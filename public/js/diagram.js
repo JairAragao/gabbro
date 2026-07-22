@@ -9,7 +9,7 @@ const $ = id => document.getElementById(id)
 
 let viewport, world, svg, tip
 let model = null, positions = {}, tableEls = {}, edges = [], edgesByTable = {}, diff = null
-let hoverTimer = null, hoverName = null
+let hoverTimer = null, focusName = null, hoverEnabled = false, dragging = false
 let tx = 40, ty = 40, scale = 1
 let orthoAvoid = true
 let dirty = false
@@ -111,8 +111,10 @@ function render () {
   ;[...world.querySelectorAll('.tbl,.grp')].forEach(e => e.remove())
   while (svg.firstChild) svg.removeChild(svg.firstChild)
   tableEls = {}; edges = []
+  clearTimeout(hoverTimer); focusName = null
 
   for (const g of model.groups) {
+    if (g.nobox) continue
     const mem = g.tables.filter(t => model.tables[t] && positions[t]); if (!mem.length) continue
     const div = document.createElement('div'); div.className = 'grp'
     const gs = groupStyle(g.color)
@@ -183,8 +185,14 @@ function render () {
     hd.addEventListener('mousedown', e => startTableDrag(e, name))
     if (!diff) el.addEventListener('dblclick', e => { e.preventDefault(); selectTableInEditor(name) })
     // hover-intent: focus only after 120ms still — sweeping the mouse doesn't mass-repaint
-    el.addEventListener('mouseenter', () => { clearTimeout(hoverTimer); hoverTimer = setTimeout(() => { hoverName = name; focusTable(name, true) }, 120) })
-    el.addEventListener('mouseleave', () => { clearTimeout(hoverTimer); if (hoverName === name) { focusTable(name, false); hoverName = null } })
+    el.addEventListener('mouseenter', () => {
+      if (!hoverEnabled || dragging) return
+      clearTimeout(hoverTimer); hoverTimer = setTimeout(() => applyFocus(name), 150)
+    })
+    el.addEventListener('mouseleave', () => {
+      clearTimeout(hoverTimer)
+      if (focusName === name) applyFocus(null)
+    })
   }
 
   const addEdge = (from, to, fromCol, status) => {
@@ -365,15 +373,26 @@ function drawPath (e) {
 function drawEdgesCheap (list) { for (const e of (list || edges)) { e.pts = routeCheap(e); drawPath(e) } }
 
 /* ---------- highlight + tooltip ---------- */
-function focusTable (name, on) {
-  const rel = new Set([name]); edges.forEach(e => { if (e.from === name || e.to === name) { rel.add(e.from); rel.add(e.to) } })
+// Single idempotent focus state: applyFocus(name) highlights, applyFocus(null)
+// clears. Avoids the flicker of paired on/off toggles racing during mouse sweeps.
+function applyFocus (name) {
+  if (name === focusName) return
+  focusName = name
+  const on = name != null
+  const rel = new Set(on ? [name] : [])
+  if (on) edges.forEach(e => { if (e.from === name || e.to === name) { rel.add(e.from); rel.add(e.to) } })
   for (const nm in tableEls) { tableEls[nm].classList.toggle('dim', on && !rel.has(nm)); tableEls[nm].classList.toggle('hl', on && nm === name) }
   edges.forEach(e => {
-    const inv = e.from === name || e.to === name
-    e.path.classList.toggle('hi', on && inv); e.path.classList.toggle('dim', on && !inv)
-    e.dA.classList.toggle('hi', on && inv); e.dB.classList.toggle('hi', on && inv)
+    const inv = on && (e.from === name || e.to === name)
+    e.path.classList.toggle('hi', inv); e.path.classList.toggle('dim', on && !inv)
+    e.dA.classList.toggle('hi', inv); e.dB.classList.toggle('hi', inv)
     e.dA.classList.toggle('dim', on && !inv); e.dB.classList.toggle('dim', on && !inv)
   })
+}
+export function setHoverHighlight (on) {
+  hoverEnabled = on
+  clearTimeout(hoverTimer)
+  if (!on) applyFocus(null)
 }
 function bindTip (el, name, type, label, body) {
   el.addEventListener('mouseenter', e => {
@@ -400,6 +419,7 @@ function markDirty () {
 }
 function startTableDrag (e, name) {
   e.stopPropagation(); e.preventDefault()
+  dragging = true; clearTimeout(hoverTimer); applyFocus(null)
   const sx = e.clientX, sy = e.clientY, ox = positions[name].x, oy = positions[name].y
   const mv = ev => {
     positions[name].x = ox + (ev.clientX - sx) / scale; positions[name].y = oy + (ev.clientY - sy) / scale
@@ -408,6 +428,7 @@ function startTableDrag (e, name) {
   }
   const up = ev => {
     window.removeEventListener('mousemove', mv); window.removeEventListener('mouseup', up)
+    dragging = false
     sizeSvg(); recomputeRoutes()
     if (ev.clientX !== sx || ev.clientY !== sy) markDirty()
   }
@@ -415,6 +436,7 @@ function startTableDrag (e, name) {
 }
 function startGroupDrag (e, g) {
   e.stopPropagation(); e.preventDefault()
+  dragging = true; clearTimeout(hoverTimer); applyFocus(null)
   const mem = g.tables.filter(t => model.tables[t] && positions[t])
   const sx = e.clientX, sy = e.clientY; const orig = {}; mem.forEach(nm => { orig[nm] = { x: positions[nm].x, y: positions[nm].y } })
   const memSet = new Set(mem), gEdges = edges.filter(ed => memSet.has(ed.from) || memSet.has(ed.to))
@@ -428,6 +450,7 @@ function startGroupDrag (e, g) {
   }
   const up = ev => {
     window.removeEventListener('mousemove', mv); window.removeEventListener('mouseup', up)
+    dragging = false
     sizeSvg(); recomputeRoutes()
     if (ev.clientX !== sx || ev.clientY !== sy) markDirty()
   }
@@ -561,6 +584,16 @@ export function initDiagram (opts) {
   $('btnFit').addEventListener('click', () => fit())
   $('btnOrtho').addEventListener('click', () => { orthoAvoid = !orthoAvoid; $('btnOrtho').classList.toggle('on', orthoAvoid); if (model) recomputeRoutes() })
   $('btnOrtho').classList.add('on')
+  // hover highlight: opt-in — with hundreds of tables the dim/undim repaints are heavy
+  const hlSaved = localStorage.getItem('gabbro:hover-highlight') === '1'
+  setHoverHighlight(hlSaved)
+  $('btnHl').classList.toggle('on', hlSaved)
+  $('btnHl').addEventListener('click', () => {
+    const on = !$('btnHl').classList.contains('on')
+    $('btnHl').classList.toggle('on', on)
+    setHoverHighlight(on)
+    localStorage.setItem('gabbro:hover-highlight', on ? '1' : '0')
+  })
 
   code.addEventListener('scroll', syncScroll)
   code.addEventListener('input', onCodeInput)

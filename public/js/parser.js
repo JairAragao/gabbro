@@ -67,8 +67,15 @@ export function parseDBML (src) {
 
     const gm = /^tablegroup\b(.*)$/i.exec(line)
     if (gm) {
-      const head = gm[1]; const nm = /^\s*([`"]?)([\w-]+)\1/.exec(head)
-      const g = { name: nm ? nm[2] : 'group', color: colorFrom(head) || '#5b6577', tables: [], lineStart: i }
+      const head = gm[1]; const nm = /^\s*(?:"([^"]+)"|'([^']+)'|`([^`]+)`|([\w-]+))/.exec(head)
+      const g = {
+        name: nm ? (nm[1] || nm[2] || nm[3] || nm[4]) : 'group',
+        color: colorFrom(head) || '#5b6577',
+        // nobox: group exists for docs/color grouping but draws no frame in the diagram
+        nobox: /[[,\s]nobox\s*[\],]/i.test(head),
+        tables: [],
+        lineStart: i
+      }
       if (!/\{/.test(line)) { while (i < n && !/\{/.test(lines[i])) i++ } i++
       while (i < n) {
         const l = lines[i].trim(); if (l.startsWith('}')) { i++; break }

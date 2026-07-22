@@ -114,7 +114,7 @@ html,body{margin:0;height:100%;background:var(--chrome);color:var(--text);overfl
 .glbl-name{overflow:hidden;text-overflow:ellipsis}
 
 .tbl{position:absolute;width:248px;background:var(--panel);border:1px solid var(--border);border-radius:6px;
-  box-shadow:0 5px 18px rgba(0,0,0,.38);overflow:hidden;user-select:none;transition:opacity .15s,box-shadow .15s}
+  box-shadow:0 5px 18px rgba(0,0,0,.38);overflow:hidden;user-select:none;transition:box-shadow .15s}
 .tbl.dim{opacity:.22}
 .tbl.hl{box-shadow:0 0 0 2px var(--accent),0 8px 24px rgba(0,0,0,.5)}
 .tbl-hd{height:34px;display:flex;align-items:center;gap:7px;padding:0 11px;cursor:grab;font-weight:700;font-size:13px}
@@ -144,7 +144,7 @@ body.mode-view .kebab{display:none}
 .icn{width:13px;height:13px;flex:none;display:block}
 .icn.pk{color:#eac16a}.icn.fk{color:var(--accent)}
 
-path.edge{fill:none;stroke:var(--edge);stroke-width:1.6;opacity:.55;transition:opacity .15s,stroke .15s}
+path.edge{fill:none;stroke:var(--edge);stroke-width:1.6;opacity:.55}
 path.edge.hi{stroke:var(--edgehi);stroke-width:2.4;opacity:1}
 path.edge.dim{opacity:.06}
 circle.dot{fill:var(--edge)}circle.dot.hi{fill:var(--edgehi)}circle.dot.dim{opacity:.06}
@@ -205,7 +205,13 @@ path.edge.diff-removed{stroke:var(--removed);stroke-dasharray:6 4;opacity:.75}
 #docsIndex{flex:1;overflow-y:auto;padding:0 6px 14px;scrollbar-width:thin;scrollbar-color:#414e5f transparent}
 .doc-idx-group{margin-top:8px}
 .doc-idx-head{display:flex;align-items:center;gap:7px;font-size:11px;font-weight:700;color:var(--muted);
-  text-transform:uppercase;letter-spacing:.5px;padding:5px 8px}
+  text-transform:uppercase;letter-spacing:.5px;padding:5px 8px;cursor:pointer;user-select:none;border-radius:6px}
+.doc-idx-head:hover{background:var(--rowhover);color:var(--text)}
+.doc-idx-chev{flex:none;font-size:10px;transition:transform .12s}
+.doc-idx-group:not(.collapsed) .doc-idx-chev{transform:rotate(90deg)}
+.doc-idx-count{margin-left:auto;font-weight:500;font-size:10px;color:var(--muted);background:#ffffff10;
+  padding:1px 6px;border-radius:8px}
+.doc-idx-group.collapsed:not(.search-open) .doc-idx-item{display:none}
 .doc-idx-dot{width:9px;height:9px;border-radius:3px;flex:none}
 .doc-idx-item{display:block;padding:4px 8px 4px 24px;font-size:12.5px;color:var(--text);text-decoration:none;
   border-radius:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
