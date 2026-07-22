@@ -330,6 +330,13 @@ function applySyncState (s) {
   el.title = s.pushWarning
     ? `push pending (${s.pushWarning.reason}): ${s.pushWarning.detail || ''} — ${s.pushWarning.fix || ''}`
     : (s.hasUpstream ? `ahead ${s.ahead} · behind ${s.behind} vs ${s.upstream}` : 'no upstream configured')
+  // uncommitted external changes on the tracked files (edited outside gabbro)
+  const dirty = Array.isArray(s.dirty) && s.dirty.length
+  const db = $('dirtyBanner')
+  if (db) {
+    db.classList.toggle('hidden', !dirty)
+    if (dirty) db.textContent = `uncommitted changes in the worktree: ${s.dirty.join(', ')} — saving from Gabbro will include them in the commit`
+  }
 }
 
 async function refreshSyncBadge () {

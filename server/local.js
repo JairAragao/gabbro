@@ -205,6 +205,9 @@ function commitFile (file, content, message, expectedBranch) {
       e.currentBranch = branch
       throw e
     }
+    // External uncommitted edits on this file get folded into the commit — the
+    // client read them from the worktree, but surface it so nothing is silent.
+    const wasDirty = (await dirtyStatus([file])).length > 0
     fs.writeFileSync(path.join(cfg.repoDir(), file), content)
     await git(['add', '--', file])
     const status = await git(['status', '--porcelain', '--', file])
@@ -212,7 +215,10 @@ function commitFile (file, content, message, expectedBranch) {
       await git(['commit', '-m', message, '--', file])
       pushBackground()
     }
-    const warning = pushWarning ? { ...pushWarning } : null
+    let warning = pushWarning ? { ...pushWarning } : null
+    if (wasDirty && !warning) {
+      warning = { reason: 'dirty-worktree', detail: `${file} had uncommitted changes in the worktree — they were included in this commit` }
+    }
     return { commit: await currentHead(), branch, warning }
   })
 }
@@ -248,7 +254,10 @@ async function syncState () {
   } catch {
     hasUpstream = false
   }
-  return { branch, detached: branch === null, ahead, behind, hasUpstream, upstream, pushWarning }
+  // dirty: uncommitted external changes on the tracked files (worktree banner)
+  let dirty = []
+  try { dirty = await dirtyStatus([cfg.dbmlFile, cfg.positionsFile]) } catch { /* never throws */ }
+  return { branch, detached: branch === null, ahead, behind, hasUpstream, upstream, pushWarning, dirty }
 }
 
 // Repo switch (PUT /api/repo): drop state tied to the previous repo.

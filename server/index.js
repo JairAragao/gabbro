@@ -13,13 +13,23 @@ app.use(express.json({ limit: '10mb' }))
 
 // Local mode is unauthenticated on 127.0.0.1 — reject any non-loopback Host
 // header (DNS rebinding: a malicious site resolving its own domain to
-// 127.0.0.1 would send that domain as Host, which fails this check).
+// 127.0.0.1 would send that domain as Host, which fails this check), and any
+// state-changing request whose Origin is not loopback (CSRF via simple
+// requests, e.g. a form POST from a web page — curl and same-origin have no
+// Origin or a loopback one).
 const LOCAL_HOST = /^(localhost|127\.0\.0\.1|\[::1\]|::1)(:\d+)?$/i
+const LOCAL_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i
 if (cfg.mode === 'local') {
   app.use((req, res, next) => {
     const host = String(req.headers.host || '')
-    if (host && !LOCAL_HOST.test(host)) {
+    if (!host || !LOCAL_HOST.test(host)) {
       return res.status(403).json({ error: 'forbidden: non-local host' })
+    }
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+      const origin = String(req.headers.origin || '')
+      if (origin && origin !== 'null' && !LOCAL_ORIGIN.test(origin)) {
+        return res.status(403).json({ error: 'forbidden: non-local origin' })
+      }
     }
     next()
   })
@@ -179,10 +189,14 @@ app.get('/api/sync-state', wrap(async (req, res) => {
 }))
 
 app.get('/api/repo', (req, res) => {
+  // Hosted: never expose local filesystem paths/recents of the host machine.
+  if (cfg.mode !== 'local') {
+    return res.json({ mode: cfg.mode, path: null, repoName: cfg.repoName, recents: [] })
+  }
   const s = settings.read()
   res.json({
     mode: cfg.mode,
-    path: cfg.mode === 'local' ? cfg.repoDir() : null,
+    path: cfg.repoDir(),
     repoName: cfg.repoName,
     recents: Array.isArray(s.recentRepos) ? s.recentRepos.filter(p => typeof p === 'string') : []
   })

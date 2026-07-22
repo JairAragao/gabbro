@@ -53,6 +53,24 @@ async function gabbroAlive () {
 
 async function main () {
   if (await gabbroAlive()) {
+    // If the user asked for a specific repo, switch the running instance to it
+    // instead of silently opening whatever it currently shows.
+    if (process.env.GABBRO_REPO) {
+      try {
+        const r = await fetch(`http://127.0.0.1:${cfg.port}/api/repo`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: process.env.GABBRO_REPO }),
+          signal: AbortSignal.timeout(5000)
+        })
+        if (!r.ok) {
+          const j = await r.json().catch(() => null)
+          console.error(`could not switch running instance to ${process.env.GABBRO_REPO}: ${(j && j.error) || r.status}`)
+        }
+      } catch (e) {
+        console.error(`could not switch running instance: ${e.message}`)
+      }
+    }
     console.log(`gabbro already running on :${cfg.port} — opening browser`)
     openBrowser(url)
     return
