@@ -1,0 +1,17 @@
+{
+  "name": "gabbro",
+  "version": "0.1.0",
+  "description": "Git-native DBML studio — diagram, docs and diff for your database schema, versioned in git",
+  "license": "MIT",
+  "author": "Jair Aragão",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "dependencies": {
+    "express": "^4.21.2"
+  }
+}
