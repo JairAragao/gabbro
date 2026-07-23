@@ -278,10 +278,12 @@ async function historyRef (branchQ) {
 
 app.get('/api/history', wrap(async (req, res) => {
   const ref = await historyRef(req.query.branch)
+  // histórico "do schema": só commits que tocam o DBML (mudança de modelo) —
+  // commits que só reposicionaram tabelas (positions.json) não entram
   res.json(await repo.logAll({
     skip: req.query.skip,
     limit: req.query.limit,
-    file: historyFile(req.query.file),
+    file: historyFile(req.query.file) || cfg.dbmlFile,
     ref
   }))
 }))
