@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.6.2 — 2026-07-23
+
+Janela nativa, topo redesenhado e histórico em tela cheia.
+
+- **Barra de título própria (frameless)** — a janela perde a moldura do sistema e ganha uma
+  barra custom: logo + nome, repositório e branch à esquerda; Visualizar/Editar e a busca
+  centralizados; minimizar/maximizar/fechar à direita. A barra arrasta a janela.
+- **Busca estilo command palette** — recolhida numa lupa que expande (Ctrl+F) com campo e o
+  filtro de escopo; aparece só no modo diagrama.
+- **Abas de comparação estilo Chrome** — as comparações de diff ficam no centro da 2ª barra,
+  com orelhas curvas, em vez de uma terceira linha.
+- **Modo histórico em tela cheia** — abrir um commit abre uma janela de três colunas: lista de
+  commits (os que não mudam o schema ficam travados/cinza, o aberto destacado), o código do
+  commit vs o anterior lado a lado, e o diagrama com o diff estrutural + painel de mudanças.
+- **Dropdowns no tema** — os seletores nativos viram menus custom (sem o azul do sistema) que
+  fecham ao clicar fora, inclusive sobre o diagrama.
+- **Diff refinado** — o botão Diff abre um dialog que não deixa comparar uma branch com ela
+  mesma; a comparação abre já com o texto lado a lado; realce âmbar na base da barra.
+- **Um botão Salvar** — schema e/ou posições no mesmo botão, com rótulo adaptável, só no modo
+  edição. O modo edição deixa o verde mais vivo.
+- Histórico do schema lista só commits que mudam o DBML; grade de fundo acompanha o zoom;
+  seleção em área no diagrama; splash com a tipografia do nome.
+
 ## 0.6.1 — 2026-07-23
 
 Acabamento de UI.
