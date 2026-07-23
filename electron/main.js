@@ -97,6 +97,20 @@ ipcMain.on('app:ready', () => reveal())
 // native dialogs.
 const UPDATE_INTERVAL_MS = 3 * 60 * 60 * 1000
 let updateReady = false
+let updTimer = null
+
+// O intervalo escolhido na aba Atualizações persiste em ~/.gabbro/settings.json
+// (via IPC) — assim o "Desligado" vale já no BOOT, antes de o renderer subir.
+function savedUpdInterval () {
+  try {
+    const s = require('../server/settings').read()
+    const v = Number(s.updateIntervalMs)
+    return Number.isFinite(v) && v >= 0 ? v : UPDATE_INTERVAL_MS
+  } catch (e) {
+    return UPDATE_INTERVAL_MS
+  }
+}
+let updIntervalMs = savedUpdInterval()
 
 function sendUpdStatus (state, extra) {
   if (mainWindow && !mainWindow.isDestroyed()) {
@@ -104,18 +118,39 @@ function sendUpdStatus (state, extra) {
   }
 }
 
+function checkForUpdates () {
+  if (!app.isPackaged) { sendUpdStatus('uptodate'); return }
+  autoUpdater.checkForUpdates().catch(e => {
+    console.error('[updater] check', (e && e.message) || e)
+    sendUpdStatus('error')
+  })
+}
+
+// 0 = desligado. O renderer manda o intervalo salvo (aba Atualizações).
+function scheduleUpdateChecks () {
+  if (updTimer) { clearInterval(updTimer); updTimer = null }
+  if (updIntervalMs > 0) updTimer = setInterval(checkForUpdates, updIntervalMs)
+}
+
 function setupAutoUpdate () {
   if (!app.isPackaged || updateReady) return
   updateReady = true
   autoUpdater.autoDownload = true
   autoUpdater.autoInstallOnAppQuit = true
+  autoUpdater.on('checking-for-update', () => sendUpdStatus('checking'))
+  autoUpdater.on('update-not-available', () => sendUpdStatus('uptodate'))
   autoUpdater.on('update-available', info => sendUpdStatus('available', { version: info && info.version }))
   autoUpdater.on('download-progress', p => sendUpdStatus('downloading', { percent: Math.round((p && p.percent) || 0) }))
   autoUpdater.on('update-downloaded', info => sendUpdStatus('downloaded', { version: info && info.version }))
-  autoUpdater.on('error', e => console.error('[updater]', (e && e.message) || e))
-  const check = () => autoUpdater.checkForUpdates().catch(e => console.error('[updater] check', (e && e.message) || e))
-  check()
-  setInterval(check, UPDATE_INTERVAL_MS)
+  autoUpdater.on('error', e => {
+    console.error('[updater]', (e && e.message) || e)
+    sendUpdStatus('error')
+  })
+  // intervalo 0 = desligado: nada de check nem download automático no boot
+  if (updIntervalMs > 0) {
+    checkForUpdates()
+    scheduleUpdateChecks()
+  }
 }
 
 ipcMain.on('update:install', () => {
@@ -123,9 +158,23 @@ ipcMain.on('update:install', () => {
   try { autoUpdater.quitAndInstall(true, true) } catch (e) { console.error('[updater] install', (e && e.message) || e) }
 })
 
+ipcMain.on('update:check', () => checkForUpdates())
+
+ipcMain.on('update:set-interval', (_e, ms) => {
+  const v = Number(ms)
+  updIntervalMs = Number.isFinite(v) && v >= 0 ? v : UPDATE_INTERVAL_MS
+  try {
+    const settings = require('../server/settings')
+    const s = settings.read()
+    s.updateIntervalMs = updIntervalMs
+    settings.write(s)
+  } catch (e) { console.error('[updater] persist interval', (e && e.message) || e) }
+  if (updateReady) scheduleUpdateChecks()
+})
+
 ipcMain.handle('dialog:pickFolder', async () => {
   const res = await dialog.showOpenDialog(mainWindow, {
-    title: 'Choose a git clone (repo with the DBML file)',
+    title: 'Escolha um clone git (repo com o arquivo DBML)',
     properties: ['openDirectory']
   })
   return res.canceled || !res.filePaths.length ? null : res.filePaths[0]
@@ -164,7 +213,7 @@ app.whenReady().then(async () => {
     setupAutoUpdate()
   } catch (e) {
     if (splashWin) { splashWin.close(); splashWin = null }
-    dialog.showErrorBox('Gabbro — failed to start', String((e && e.message) || e))
+    dialog.showErrorBox('Gabbro — falha ao iniciar', String((e && e.message) || e))
     app.quit()
   }
 })

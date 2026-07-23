@@ -9,5 +9,7 @@ contextBridge.exposeInMainWorld('gabbroDesktop', {
   pickFolder: () => ipcRenderer.invoke('dialog:pickFolder'),
   signalReady: () => ipcRenderer.send('app:ready'),
   onUpdateStatus: cb => ipcRenderer.on('update:status', (_e, payload) => cb(payload)),
-  installUpdate: () => ipcRenderer.send('update:install')
+  installUpdate: () => ipcRenderer.send('update:install'),
+  checkUpdates: () => ipcRenderer.send('update:check'),
+  setUpdateInterval: ms => ipcRenderer.send('update:set-interval', ms)
 })
