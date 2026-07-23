@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.6.0 — 2026-07-23
+
+Modo diff, organização do diagrama e chrome por modo.
+
+- **Modo diff em abas** — o botão Diff abre um dialog de seleção (base → alvo); confirmar
+  cria uma aba de comparação no topo, ao lado de Diagrama/Docs. Várias comparações abertas
+  ao mesmo tempo, cada uma fechável; o tema ganha tom âmbar enquanto uma comparação está
+  ativa. Painel **Mudanças** lista as tabelas novas/alteradas/removidas (clique centraliza
+  no diagrama), botão **Destacar** escurece o que não mudou e botão **Texto** mostra o diff
+  unificado do DBML entre as branches (`GET /api/diff-text`).
+- **Auto-organização por grupos** — menu Organizar com três layouts que respeitam os
+  agrupamentos (tabela nunca sai do grupo): Esquerda → direita (camadas de grupos pela
+  direção dos FKs), Floco de neve (grupo mais conectado no centro, demais em espiral) e
+  Compacto (grade por grupos).
+- **Seleção em área** — no modo edição, arrastar no fundo desenha um retângulo que
+  seleciona as tabelas tocadas (Shift acumula); arrastar o cabeçalho de uma selecionada
+  move a seleção inteira. Esc limpa.
+- **Chrome por modo** — Histórico saiu do topo e virou aba das Configurações (com switch
+  "todos os arquivos"; clicar num commit abre a visualização dele no diagrama). Docs some
+  no modo edição. Modo local mostra só Sincronizar (o refresh separado ficou no hosted).
+- **Editor com atalhos estilo VS Code** — Ctrl+D (próxima ocorrência), Ctrl+/ (comentar),
+  Alt+setas (mover linha), Shift+Alt+setas (duplicar), Ctrl+Shift+K (excluir), Ctrl+L
+  (selecionar linha), Tab/Shift+Tab (indentar), auto-indentação no Enter.
+- **UI** — toolbar enxuta (busca recolhida numa lupa, contador de tabelas virou chip no
+  canto do diagrama), grade de fundo em pontos (estilo dbdiagram) desligável, roteamento
+  das linhas parametrizável e persistido, aba Atalhos nas Configurações.
+- **Docs** — filtros por grupo/tabela, comentário da coluna em coluna própria, atributos
+  antes do nome, índices e referências em painéis visuais, mini-diagrama de relacionamentos
+  que espelha o layout principal com setas ortogonais e toggle tabelas inteiras/só vínculos.
+- Correções: preservação de edição de DBML não salva no sync/refresh/troca de branch,
+  `clearDrafts` não apaga mais as preferências, roteamento imune a git localizado
+  (`LC_ALL=C`), intervalo de auto-update persistido e respeitado no boot, e a UI toda
+  traduzida para pt-BR — além de duas rodadas de varredura multi-agente com 28 achados
+  corrigidos.
+
 ## 0.5.0 — 2026-07-23
 
 Interface em português, configurações completas e modo doc turbinado.
