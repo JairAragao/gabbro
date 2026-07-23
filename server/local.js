@@ -8,7 +8,7 @@
 const fs = require('fs')
 const path = require('path')
 const cfg = require('./config')
-const { git, serialize } = require('./git')
+const { git, serialize, sanitize } = require('./git')
 
 function oneLine (s) {
   return String(s == null ? '' : s).replace(/\s+/g, ' ').trim()
@@ -27,7 +27,7 @@ async function getIdentity () {
 async function ensureIdentity () {
   const id = await getIdentity()
   if (!id.name || !id.email) {
-    const e = new Error('git identity not configured — run: git config --global user.name "Your Name" && git config --global user.email "you@example.com"')
+    const e = new Error('identidade git não configurada — rode: git config --global user.name "Seu Nome" && git config --global user.email "voce@exemplo.com"')
     e.status = 422
     throw e
   }
@@ -76,11 +76,11 @@ function classifyReason (msg) {
 }
 
 const FIXES = {
-  'no-remote': 'configure a remote/upstream: git remote add origin <url> (or git push -u origin <branch>)',
-  auth: 'configure a credential helper or SSH key (e.g. git config credential.helper store, or switch origin to an SSH URL)',
-  diverged: 'run Sync to integrate remote changes (pull --rebase) and push again',
-  timeout: 'check your network connection to the remote and retry',
-  other: 'check the detail message and your git setup'
+  'no-remote': 'configure um remoto/upstream: git remote add origin <url> (ou git push -u origin <branch>)',
+  auth: 'configure um credential helper ou chave SSH (ex.: git config credential.helper store, ou troque o origin pra URL SSH)',
+  diverged: 'use Sincronizar para integrar as mudanças remotas (pull --rebase) e enviar de novo',
+  timeout: 'verifique sua conexão de rede com o remoto e tente de novo',
+  other: 'verifique a mensagem de detalhe e a sua configuração do git'
 }
 
 function fixFor (reason) {
@@ -98,7 +98,7 @@ function isNonFastForward (msg) {
 async function pushNow () {
   try {
     const remotes = (await git(['remote'])).split('\n').map(s => s.trim()).filter(Boolean)
-    if (!remotes.length) return { ok: false, reason: 'no-remote', error: 'no remote configured (origin missing)' }
+    if (!remotes.length) return { ok: false, reason: 'no-remote', error: 'nenhum remoto configurado (origin ausente)' }
     await git(['push'])
     return { ok: true }
   } catch (err) {
@@ -112,7 +112,7 @@ async function pushNow () {
 async function pullRebase () {
   try {
     const remotes = (await git(['remote'])).split('\n').map(s => s.trim()).filter(Boolean)
-    if (!remotes.length) return { ok: false, reason: 'no-remote', detail: 'no remote configured (origin missing)' }
+    if (!remotes.length) return { ok: false, reason: 'no-remote', detail: 'nenhum remoto configurado (origin ausente)' }
     const out = await git(['pull', '--rebase', '--autostash'])
 
     // `--autostash` can exit 0 even when the stash re-apply conflicts, leaving
@@ -124,12 +124,36 @@ async function pullRebase () {
       return {
         ok: false,
         reason: 'diverged',
-        detail: 'pull brought a conflict with uncommitted local changes; the worktree was restored — your local changes are kept in the stash (git stash list)'
+        detail: 'o pull trouxe conflito com mudanças locais não commitadas; o worktree foi restaurado — suas mudanças locais estão guardadas no stash (git stash list)'
       }
     }
-    return { ok: true, message: oneLine(out) || 'pull done' }
+    return { ok: true, message: oneLine(out) || 'pull concluído' }
   } catch (err) {
     try { await git(['rebase', '--abort']) } catch { /* no rebase in progress */ }
+    const detail = oneLine(err.message)
+    return { ok: false, reason: classifyReason(detail), detail }
+  }
+}
+
+// Estratégia "safe": só integra quando dá fast-forward — divergência nunca
+// toca os arquivos do usuário, volta como 'diverged' pro app decidir.
+// Mesma guarda de autostash do pullRebase. NEVER throws.
+async function pullFF () {
+  try {
+    const remotes = (await git(['remote'])).split('\n').map(s => s.trim()).filter(Boolean)
+    if (!remotes.length) return { ok: false, reason: 'no-remote', detail: 'nenhum remoto configurado (origin ausente)' }
+    const out = await git(['pull', '--ff-only', '--autostash'])
+    const unmerged = (await git(['ls-files', '-u'])).trim()
+    if (unmerged) {
+      await git(['reset', '--hard', 'HEAD'])
+      return {
+        ok: false,
+        reason: 'diverged',
+        detail: 'o pull trouxe conflito com mudanças locais não commitadas; o worktree foi restaurado — suas mudanças locais estão guardadas no stash (git stash list)'
+      }
+    }
+    return { ok: true, message: oneLine(out) || 'pull concluído' }
+  } catch (err) {
     const detail = oneLine(err.message)
     return { ok: false, reason: classifyReason(detail), detail }
   }
@@ -146,22 +170,28 @@ async function pushSync () {
     const pr = await pullRebase()
     if (!pr.ok) return { ok: false, reason: pr.reason, error: pr.detail }
   }
-  return { ok: false, reason: 'diverged', error: 'push rejected repeatedly: the remote keeps changing — try syncing again' }
+  return { ok: false, reason: 'diverged', error: 'push rejeitado repetidamente: o remoto não para de mudar — tente sincronizar de novo' }
 }
 
 // One push in flight at a time; requests arriving meanwhile coalesce into a
 // single re-run. Failure is stored as the accumulated warning.
+// pushEpoch: um push em background que termina DEPOIS de um sync bem-sucedido
+// (ou troca de repo) não pode regravar um warning obsoleto — só grava se a
+// época em que ele nasceu ainda for a atual.
 let pushWarning = null
 let pushInFlight = null
 let pushQueued = false
+let pushEpoch = 0
 
 function pushBackground () {
   if (pushInFlight) {
     pushQueued = true
     return
   }
+  const epoch = pushEpoch
   pushInFlight = pushNow()
     .then(r => {
+      if (epoch !== pushEpoch) return
       pushWarning = r.ok ? null : { reason: r.reason || 'other', detail: r.error, fix: fixFor(r.reason) }
     })
     .catch(() => { /* pushNow never throws */ })
@@ -183,12 +213,12 @@ function commitFile (file, content, message, expectedBranch) {
     await ensureIdentity()
     const branch = await currentBranch()
     if (!branch) {
-      const e = new Error('repository is in detached HEAD — checkout a branch to edit')
+      const e = new Error('repositório em detached HEAD — faça checkout de uma branch para editar')
       e.status = 409
       throw e
     }
     if (expectedBranch !== undefined && expectedBranch !== branch) {
-      const e = new Error(`branch mismatch: repository is on "${branch}", client is editing "${expectedBranch}" — reload`)
+      const e = new Error(`branch divergente: o repositório está em "${branch}", o app está editando "${expectedBranch}" — recarregue`)
       e.status = 409
       e.currentBranch = branch
       throw e
@@ -205,21 +235,90 @@ function commitFile (file, content, message, expectedBranch) {
     }
     let warning = pushWarning ? { ...pushWarning } : null
     if (wasDirty && !warning) {
-      warning = { reason: 'dirty-worktree', detail: `${file} had uncommitted changes in the worktree — they were included in this commit` }
+      warning = { reason: 'dirty-worktree', detail: `${file} tinha mudanças não commitadas no worktree — elas foram incluídas neste commit` }
     }
     return { commit: await currentHead(), branch, warning }
   })
 }
 
-function sync () {
+// strategy: 'rebase' (padrão — remoto vence, rebase por cima) | 'safe' (só
+// fast-forward; divergência volta como falha 'diverged' sem tocar em nada).
+function sync (strategy) {
   return serialize(async () => {
-    const pr = await pullRebase()
+    const pr = strategy === 'safe' ? await pullFF() : await pullRebase()
     if (!pr.ok) return { ok: false, step: 'pull', reason: pr.reason, detail: pr.detail, fix: fixFor(pr.reason) }
-    const ps = await pushSync()
-    if (!ps.ok) return { ok: false, step: 'push', reason: ps.reason || 'other', detail: ps.error, fix: fixFor(ps.reason) }
+    const ps = strategy === 'safe' ? await pushNow() : await pushSync()
+    if (!ps.ok) {
+      if (strategy === 'safe' && isNonFastForward(ps.error)) {
+        return { ok: false, step: 'push', reason: 'diverged', detail: ps.error, fix: fixFor('diverged') }
+      }
+      return { ok: false, step: 'push', reason: ps.reason || 'other', detail: ps.error, fix: fixFor(ps.reason) }
+    }
     pushWarning = null
+    pushEpoch++
     return { ok: true, message: pr.message }
   })
+}
+
+// Painel "Saúde do git" das Configurações (padrão do Basalt): identidade,
+// remoto, upstream, divergência, push pendente e worktree — cada um com ok/detalhe.
+async function gitHealth () {
+  const id = await getIdentity()
+  let remote = null
+  try { remote = (await git(['config', '--get', 'remote.origin.url'])).trim() || null } catch { remote = null }
+  const s = await syncState()
+  const checks = [
+    {
+      id: 'identity',
+      ok: !!(id.name && id.email),
+      label: 'Identidade git configurada',
+      detail: id.name && id.email ? `${id.name} <${id.email}>` : 'git config user.name / user.email ausentes — edição bloqueada'
+    },
+    {
+      id: 'branch',
+      ok: !s.detached,
+      label: 'Branch ativa',
+      detail: s.branch || 'detached HEAD — faça checkout de uma branch'
+    },
+    {
+      id: 'remote',
+      ok: !!remote,
+      label: 'Remoto configurado',
+      detail: remote ? sanitize(remote) : 'nenhum origin — commits ficam só locais'
+    },
+    {
+      id: 'upstream',
+      ok: s.hasUpstream,
+      label: 'Upstream da branch',
+      detail: s.hasUpstream ? s.upstream : 'sem upstream — git push -u origin <branch>'
+    },
+    {
+      id: 'diverged',
+      ok: !s.behind,
+      label: 'Em dia com o remoto',
+      detail: s.hasUpstream ? `${s.ahead} à frente · ${s.behind} atrás` : '—'
+    },
+    {
+      id: 'push',
+      ok: !s.pushWarning,
+      label: 'Push',
+      detail: s.pushWarning ? `${s.pushWarning.reason}: ${s.pushWarning.detail || ''}` : 'sem pendências'
+    },
+    {
+      id: 'dirty',
+      ok: !(Array.isArray(s.dirty) && s.dirty.length),
+      label: 'Worktree dos arquivos rastreados',
+      detail: Array.isArray(s.dirty) && s.dirty.length ? s.dirty.map(d => d.file || d).join(', ') : 'limpo'
+    }
+  ]
+  return {
+    ok: checks.every(c => c.ok),
+    branch: s.branch,
+    identity: id.name && id.email ? id : null,
+    remoteUrl: remote ? sanitize(remote) : null,
+    syncState: s,
+    checks
+  }
 }
 
 // NEVER throws.
@@ -247,6 +346,7 @@ async function syncState () {
 function onRepoSwitch () {
   pushWarning = null
   pushQueued = false
+  pushEpoch++
 }
 
 module.exports = {
@@ -261,9 +361,11 @@ module.exports = {
   fixFor,
   pushNow,
   pullRebase,
+  pullFF,
   pushSync,
   commitFile,
   sync,
   syncState,
+  gitHealth,
   onRepoSwitch
 }
