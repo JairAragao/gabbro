@@ -14,6 +14,8 @@ const state = {
   tab: 'diagram',
   mode: 'view',
   diffOn: false,
+  diffTabs: [], // comparações abertas: [{base, target}] — viram abas no topo
+  diffIdx: null, // índice da comparação ativa (null = modo normal)
   // history mode: viewing one commit — Diagram/Docs render commit vs parent
   hist: null, // { hash, meta, model, parentModel, diff }
   models: new Map(), // branch -> { text, model } (may hold unsaved edits)
@@ -149,8 +151,8 @@ async function renderAll (opts) {
     const union = buildUnionModel(h.parentModel, h.model, h.diff)
     diagram.loadModel(union, state.positions, h.diff, { fitView: opts.fitView !== false, dirty: false })
     renderDocs(union, h.diff)
-  } else if (state.diffOn) {
-    const base = $('diffBase').value, target = $('diffTarget').value
+  } else if (state.diffOn && activeDiffTab()) {
+    const { base, target } = activeDiffTab()
     const [b, t] = await Promise.all([ensureModel(base), ensureModel(target)])
     const d = diffModels(b.model, t.model)
     const union = buildUnionModel(b.model, t.model, d)
@@ -181,7 +183,10 @@ async function switchBranch (b) {
 
 async function openHistoryCommit (c) {
   try {
-    if (state.diffOn) setDiffUi(false) // diff mode and history mode are mutually exclusive
+    if (state.diffOn) { state.diffIdx = null; setDiffUi(false) } // diff e histórico são exclusivos
+    // a lista vive no modal de configurações — fecha pra mostrar o diagrama
+    $('settingsModal').classList.add('hidden')
+    $('btnSettings').classList.remove('on')
     const r = await api.getCommit(c.hash)
     const model = parseDBML(r.content || '')
     const parentModel = parseDBML(r.parentContent || '')
@@ -194,7 +199,7 @@ async function openHistoryCommit (c) {
     }
     state.mode = 'view'
     hist.setActive({ ...c, ...(r.meta || {}) })
-    setTab('diagram') // show the structural diff right away; History tab keeps the detail panel
+    setTab('diagram') // mostra o diff estrutural na hora; o detalhe fica no modal
     await renderAll({ fitView: false })
   } catch (e) { fail(e) }
 }
@@ -207,14 +212,13 @@ function exitHistory () {
 }
 
 function setTab (tab) {
+  if (tab !== 'diagram' && tab !== 'docs') tab = 'diagram' // 'history' saiu do topo
   state.tab = tab
   localStorage.setItem('gabbro:tab', tab)
   document.querySelectorAll('#tabs .tab').forEach(el => el.classList.toggle('on', el.dataset.tab === tab))
   $('diagramSection').classList.toggle('hidden', tab !== 'diagram')
   $('docsSection').classList.toggle('hidden', tab !== 'docs')
-  $('historySection').classList.toggle('hidden', tab !== 'history')
   $('searchWrap').classList.toggle('hidden', tab !== 'diagram')
-  if (tab === 'history') hist.ensureLoaded().catch(fail)
   updateChrome()
 }
 
@@ -237,16 +241,64 @@ function fillBranchSelects () {
 
 function setDiffUi (on) {
   state.diffOn = on
-  $('btnDiff').classList.toggle('on', on)
   $('diffCtrls').classList.toggle('hidden', !on)
+  document.body.classList.toggle('diff-on', on) // tema âmbar no modo diff
   if (!on) hideDiffTools()
+  renderDiffTabs()
 }
-async function toggleDiff (on) {
-  if (on && state.hist) { state.hist = null; hist.setActive(null) } // mutually exclusive
-  setDiffUi(on)
-  try {
-    await renderAll({ fitView: true })
-  } catch (e) { fail(e) }
+
+/* ---------- abas de comparação (diff) no topo ---------- */
+
+const activeDiffTab = () => (state.diffIdx != null ? state.diffTabs[state.diffIdx] : null)
+
+function renderDiffTabs () {
+  const wrap = $('diffTabs')
+  wrap.innerHTML = ''
+  state.diffTabs.forEach((t, i) => {
+    const chip = document.createElement('button')
+    chip.className = 'diff-tab' + (state.diffIdx === i ? ' on' : '')
+    chip.title = `Comparar ${t.base} → ${t.target}`
+    chip.innerHTML = `<span class="dt-lbl">${escHtml(t.base)} → ${escHtml(t.target)}</span><span class="dt-x" title="Fechar">✕</span>`
+    chip.addEventListener('click', e => {
+      if (e.target.closest('.dt-x')) { closeDiffTab(i); return }
+      activateDiff(state.diffIdx === i ? null : i)
+    })
+    wrap.appendChild(chip)
+  })
+}
+
+function activateDiff (idx) {
+  if (idx != null && state.hist) { state.hist = null; hist.setActive(null) } // exclusivos
+  state.diffIdx = idx
+  setDiffUi(idx != null)
+  renderAll({ fitView: true }).catch(fail)
+}
+
+function closeDiffTab (i) {
+  const wasActive = state.diffIdx === i
+  state.diffTabs.splice(i, 1)
+  if (wasActive) { activateDiff(null); return }
+  if (state.diffIdx != null && state.diffIdx > i) state.diffIdx--
+  renderDiffTabs()
+}
+
+function openDiffModal () {
+  const base = $('diffBase'), target = $('diffTarget')
+  fillSelect(base, state.branches, base.value || (state.branches.includes('master') ? 'master' : state.branches[0]))
+  fillSelect(target, state.branches, target.value || state.branch)
+  $('diffModal').classList.remove('hidden')
+}
+function closeDiffModal () { $('diffModal').classList.add('hidden') }
+
+function confirmDiff () {
+  const base = $('diffBase').value, target = $('diffTarget').value
+  if (!base || !target) return
+  if (base === target) { toast('escolha duas branches diferentes', 'warn'); return }
+  closeDiffModal()
+  const existing = state.diffTabs.findIndex(t => t.base === base && t.target === target)
+  if (existing !== -1) { activateDiff(existing); return }
+  state.diffTabs.push({ base, target })
+  activateDiff(state.diffTabs.length - 1)
 }
 
 /* ---------- modo diff: navegador de mudanças + diff textual ---------- */
@@ -293,10 +345,12 @@ function renderDiffTextHtml (txt) {
 }
 
 async function loadDiffText () {
+  const tabD = activeDiffTab()
+  if (!tabD) return
   const pre = $('dpPre')
   pre.textContent = 'Carregando…'
   try {
-    const txt = await api.getDiffText($('diffBase').value, $('diffTarget').value)
+    const txt = await api.getDiffText(tabD.base, tabD.target)
     if (txt.trim()) pre.innerHTML = renderDiffTextHtml(txt)
     else pre.textContent = '(sem diferenças no texto entre as branches)'
   } catch (e) { pre.textContent = e.message || 'falha ao carregar o diff' }
@@ -490,48 +544,6 @@ async function loadGitHealth () {
 
 const escHtml = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
 
-/* ---------- histórico completo do repositório (aba Histórico) ---------- */
-
-const allHist = { commits: [], skip: 0, hasMore: false, loaded: false, loading: false }
-
-async function loadAllHistPage () {
-  if (allHist.loading) return
-  allHist.loading = true
-  const btn = $('allHistMore')
-  btn.disabled = true
-  try {
-    const r = await api.getHistoryAll(allHist.skip, 30)
-    const commits = (r && r.commits) || []
-    allHist.skip += commits.length
-    allHist.hasMore = !!(r && r.hasMore)
-    allHist.commits.push(...commits)
-    renderAllHistRows(commits)
-    $('allHistEmpty').classList.toggle('hidden', allHist.commits.length > 0)
-    btn.classList.toggle('hidden', !allHist.hasMore)
-    allHist.loaded = true
-  } catch (e) { fail(e) } finally {
-    allHist.loading = false
-    btn.disabled = false
-  }
-}
-
-function renderAllHistRows (commits) {
-  const ul = $('allHistList')
-  for (const c of commits) {
-    const li = document.createElement('li')
-    li.className = 'ah-row'
-    const files = c.files || []
-    li.innerHTML =
-      `<div class="ah-top"><span class="hist-pill mono">${escHtml(c.shortHash || '')}</span>` +
-      `<span class="ah-msg" title="${escHtml(c.message || '')}">${escHtml(hist.firstLine(c.message))}</span></div>` +
-      `<div class="ah-sub"><span>${escHtml(c.authorName || c.authorEmail || 'desconhecido')}</span>` +
-      `<span class="hist-sep">·</span><span title="${escHtml(hist.absoluteTime(c.date))}">${escHtml(hist.relativeTime(c.date))}</span>` +
-      `<span class="hist-sep">·</span><span>${files.length} arquivo${files.length === 1 ? '' : 's'}</span>` +
-      `<span class="ah-files mono" title="${escHtml(files.join('\n'))}">${escHtml(files.slice(0, 3).join(' · '))}${files.length > 3 ? ' …' : ''}</span></div>`
-    ul.appendChild(li)
-  }
-}
-
 /* ---------- atualizações (aba Atualizações) ---------- */
 
 const UPD_INTERVAL_KEY = 'gabbro:update-interval'
@@ -647,7 +659,7 @@ function setSettingsTab (tab) {
     $('syncHostedNote').classList.toggle('hidden', local)
     if (local) loadGitHealth()
   }
-  if (tab === 'history' && !allHist.loaded) loadAllHistPage()
+  if (tab === 'history') hist.ensureLoaded().catch(fail)
   if (tab === 'updates') {
     // valor persistido vem do settings.json via config — localStorage não
     // sobrevive à troca de porta do Electron entre launches
@@ -735,8 +747,8 @@ function initSettingsUi () {
   $('ghRefresh').addEventListener('click', loadGitHealth)
   setInterval(autosyncTick, 15000)
 
-  // Histórico completo
-  $('allHistMore').addEventListener('click', loadAllHistPage)
+  // Histórico — alternar entre commits do schema e todos os arquivos
+  $('histAllFiles').addEventListener('change', e => hist.setAllFiles(e.target.checked).catch(fail))
 
   // Atualizações
   const desktop = !!window.gabbroDesktop
@@ -924,7 +936,8 @@ function initDesktopUpdates () {
 function setupLocalChrome () {
   $('btnSync').classList.remove('hidden')
   $('btnSync').addEventListener('click', doSync)
-  $('btnRefresh').title = 'Buscar o mais recente do remoto (só leitura) — use Sincronizar para integrar'
+  // local: Sincronizar já cobre o pull — o ↻ separado só confundia (fica no hosted)
+  $('btnRefresh').classList.add('hidden')
   initRepoSwitcher()
   initDesktopUpdates()
   refreshSyncBadge()
@@ -1011,14 +1024,11 @@ async function boot () {
   document.querySelectorAll('#tabs .tab').forEach(el => el.addEventListener('click', () => setTab(el.dataset.tab)))
   $('branchSel').addEventListener('change', e => switchBranch(e.target.value).catch(fail))
   $('btnRefresh').addEventListener('click', doRefresh)
-  $('btnDiff').addEventListener('click', () => toggleDiff(!state.diffOn))
-  const onDiffSel = () => {
-    if (!state.diffOn) return
-    renderAll({ fitView: true }).catch(fail)
-    if (diffPaneOpen) loadDiffText()
-  }
-  $('diffBase').addEventListener('change', onDiffSel)
-  $('diffTarget').addEventListener('change', onDiffSel)
+  $('btnDiff').addEventListener('click', openDiffModal)
+  $('diffModalClose').addEventListener('click', closeDiffModal)
+  $('diffCancel').addEventListener('click', closeDiffModal)
+  $('diffGo').addEventListener('click', confirmDiff)
+  $('diffModal').addEventListener('mousedown', e => { if (e.target === $('diffModal')) closeDiffModal() })
   $('btnDiffDim').addEventListener('click', () => {
     diffDim = !diffDim
     $('btnDiffDim').classList.toggle('on', diffDim)
@@ -1039,6 +1049,7 @@ async function boot () {
   $('modeEdit').addEventListener('click', () => {
     if (state.diffOn || state.hist || !state.config || state.config.readOnly) return
     state.mode = 'edit'
+    if (state.tab === 'docs') setTab('diagram') // edição é diagrama + editor; doc é leitura
     const entry = state.models.get(state.branch)
     if (entry) diagram.setEditorText(entry.text)
     updateChrome()

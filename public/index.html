@@ -39,7 +39,7 @@
     <nav id="tabs">
       <button class="tab on" data-tab="diagram">Diagrama</button>
       <button class="tab" data-tab="docs">Docs</button>
-      <button class="tab" data-tab="history">Hist&oacute;rico</button>
+      <span id="diffTabs"></span>
     </nav>
     <select id="branchSel" title="Branch"></select>
     <span id="syncBadge" class="hidden" title=""></span>
@@ -48,9 +48,6 @@
     <button class="btn" id="btnRefresh" title="Buscar o mais recente do remoto">&#10227;</button>
     <button class="btn" id="btnDiff" title="Comparar duas branches">Diff</button>
     <span id="diffCtrls" class="hidden">
-      <select id="diffBase" title="Branch base"></select>
-      <span class="diff-arrow">&rarr;</span>
-      <select id="diffTarget" title="Branch alvo"></select>
       <button class="btn on" id="btnDiffDim" title="Escurecer as tabelas sem mudan&ccedil;a">Destacar</button>
       <button class="btn" id="btnDiffText" title="Ver o diff textual do DBML entre as branches">Texto</button>
     </span>
@@ -157,11 +154,25 @@
           </section>
 
           <section id="setHistory" class="sm-panel hidden">
-            <p class="sm-desc">Todos os commits do reposit&oacute;rio (qualquer arquivo), do mais recente
-            ao mais antigo. A aba Hist&oacute;rico principal mostra s&oacute; os commits do schema, com diff estrutural.</p>
-            <ul id="allHistList" class="ah-list"></ul>
-            <div id="allHistEmpty" class="sm-empty hidden">sem commits ainda</div>
-            <button class="btn hidden" id="allHistMore">Carregar mais</button>
+            <label class="set-row"><input type="checkbox" id="histAllFiles"> Mostrar todos os arquivos do reposit&oacute;rio</label>
+            <p class="sm-desc">Desligado: s&oacute; commits do schema — clicar num commit abre a
+            visualiza&ccedil;&atilde;o dele no diagrama, com o diff estrutural contra o commit anterior.</p>
+            <div id="histWrap">
+              <div id="histDetail" class="hidden">
+                <div class="hd-line">
+                  <span class="hist-pill mono" id="histDetailHash"></span>
+                  <span class="hd-msg" id="histDetailMsg"></span>
+                  <span class="spacer"></span>
+                  <button class="btn sm" id="histDiffToggle">Mostrar diff textual</button>
+                  <button class="btn sm" id="histDetailClose">Sair</button>
+                </div>
+                <div class="hd-meta" id="histDetailMeta"></div>
+                <pre id="histDiffPre" class="hidden"></pre>
+              </div>
+              <ul id="histList"></ul>
+              <div id="histEmpty" class="hidden">nenhum commit ainda</div>
+              <button class="btn hidden" id="histMore">Carregar mais</button>
+            </div>
           </section>
 
           <section id="setKeys" class="sm-panel hidden">
@@ -317,24 +328,23 @@
       <div id="docsContent"></div>
     </section>
 
-    <section id="historySection" class="hidden">
-      <div id="histWrap">
-        <div id="histDetail" class="hidden">
-          <div class="hd-line">
-            <span class="hist-pill mono" id="histDetailHash"></span>
-            <span class="hd-msg" id="histDetailMsg"></span>
-            <span class="spacer"></span>
-            <button class="btn sm" id="histDiffToggle">Mostrar diff textual</button>
-            <button class="btn sm" id="histDetailClose">Sair</button>
-          </div>
-          <div class="hd-meta" id="histDetailMeta"></div>
-          <pre id="histDiffPre" class="hidden"></pre>
-        </div>
-        <ul id="histList"></ul>
-        <div id="histEmpty" class="hidden">nenhum commit tocando os arquivos rastreados ainda</div>
-        <button class="btn hidden" id="histMore">Carregar mais</button>
+  </div>
+
+  <div id="diffModal" class="hidden">
+    <div class="dm-card">
+      <div class="sm-head"><span class="sm-title">Comparar branches</span><span class="spacer"></span>
+        <button class="btn sm" id="diffModalClose">&#10005;</button></div>
+      <div class="dm-body">
+        <select id="diffBase" title="Branch base"></select>
+        <span class="diff-arrow">&rarr;</span>
+        <select id="diffTarget" title="Branch alvo"></select>
       </div>
-    </section>
+      <p class="set-hint dm-hint">Abre uma aba de compara&ccedil;&atilde;o no topo — d&aacute; pra manter v&aacute;rias abertas.</p>
+      <div class="dm-actions">
+        <button class="btn" id="diffCancel">Cancelar</button>
+        <button class="btn primary" id="diffGo">Comparar</button>
+      </div>
+    </div>
   </div>
 
   <!-- Tela de boas-vindas — exibida num boot sem repositório configurado, no lugar

@@ -56,7 +56,8 @@ const state = {
   loading: false,
   loaded: false,
   activeHash: null,
-  diffShownFor: null
+  diffShownFor: null,
+  allFiles: false // false = só commits do schema; true = todos os arquivos do repo
 }
 
 let hooks = { onOpenCommit: () => {}, onExit: () => {}, fail: () => {} }
@@ -70,6 +71,13 @@ export function initHistory (h) {
 
 export async function ensureLoaded () {
   if (state.loaded || state.loading) return
+  await reload()
+}
+
+export function isAllFiles () { return state.allFiles }
+export async function setAllFiles (v) {
+  if (state.allFiles === !!v) return
+  state.allFiles = !!v
   await reload()
 }
 
@@ -99,7 +107,7 @@ async function loadPage () {
   btn.disabled = true
   btn.textContent = 'Carregando…'
   try {
-    const page = normalizeHistory(await api.getHistory(state.skip, PAGE))
+    const page = normalizeHistory(await (state.allFiles ? api.getHistoryAll : api.getHistory)(state.skip, PAGE))
     const startIndex = state.commits.length
     state.commits = state.commits.concat(page.commits)
     state.skip += page.commits.length
