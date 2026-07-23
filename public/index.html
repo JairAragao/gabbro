@@ -54,9 +54,11 @@
       <button class="btn on" id="btnDiffDim" title="Escurecer as tabelas sem mudan&ccedil;a">Destacar</button>
       <button class="btn" id="btnDiffText" title="Ver o diff textual do DBML entre as branches">Texto</button>
     </span>
-    <span class="meta" id="meta"></span>
     <span class="spacer"></span>
     <div id="searchWrap">
+      <button id="searchBtn" class="btn" title="Buscar tabela ou coluna">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.8-3.8"/></svg>
+      </button>
       <select id="searchScope" title="Escopo da busca">
         <option value="all" selected>Tudo</option>
         <option value="tables">Tabelas</option>
@@ -282,6 +284,7 @@
       <div id="viewport">
         <div id="world"><svg id="svg"></svg></div>
         <div id="diffNav" class="hidden"></div>
+        <div id="metaChip" class="meta-chip"></div>
         <div id="zoombar">
           <button class="btn sm" id="btnFit" title="Ajustar o diagrama &agrave; tela">Ajustar</button>
           <button class="btn sm" id="btnArrange" title="Reorganizar as tabelas automaticamente">Organizar</button>

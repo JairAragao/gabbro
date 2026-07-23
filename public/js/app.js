@@ -137,7 +137,7 @@ function updateChrome () {
 }
 function updateMeta () {
   const s = diagram.getStats()
-  $('meta').textContent = s ? `${s.tables} tabelas · ${s.groups} grupos · ${s.refs} refs` : ''
+  $('metaChip').textContent = s ? `${s.tables} tabelas · ${s.groups} grupos · ${s.refs} refs` : ''
 }
 
 async function renderAll (opts) {
@@ -1052,13 +1052,28 @@ async function boot () {
     $('searchPrev').classList.toggle('hidden', !has || r.total < 2)
     $('searchNext').classList.toggle('hidden', !has || r.total < 2)
   }
+  // busca recolhida por padrão: só a lupa; expande ao clicar, recolhe vazia
+  const sw = $('searchWrap')
+  const collapseSearch = () => { sw.classList.remove('open') }
+  $('searchBtn').addEventListener('click', () => {
+    sw.classList.toggle('open')
+    if (sw.classList.contains('open')) $('search').focus()
+  })
+  sw.addEventListener('focusout', () => {
+    setTimeout(() => {
+      if (!sw.contains(document.activeElement) && !$('search').value.trim()) collapseSearch()
+    }, 120)
+  })
   const scope = () => $('searchScope').value
   $('search').addEventListener('keydown', e => {
     if (e.key === 'Enter') {
       let r = diagram.searchStep(e.shiftKey ? -1 : 1)
       if (!r.total) r = diagram.searchTable(e.target.value, scope())
       searchUi(r)
-    } else if (e.key === 'Escape') { e.target.value = ''; diagram.searchTable(''); searchUi(null) }
+    } else if (e.key === 'Escape') {
+      if (!e.target.value) { collapseSearch(); e.target.blur(); return }
+      e.target.value = ''; diagram.searchTable(''); searchUi(null)
+    }
   })
   $('search').addEventListener('input', e => searchUi(diagram.searchTable(e.target.value, scope())))
   $('searchScope').addEventListener('change', () => searchUi(diagram.searchTable($('search').value, scope())))

@@ -617,3 +617,16 @@ circle.mini-dot{fill:var(--accent)}
   font-family:ui-monospace,Consolas,monospace;color:var(--text)}
 .key-row code{font-family:ui-monospace,Consolas,monospace;font-size:11.5px;background:#ffffff0d;
   padding:1px 5px;border-radius:4px}
+
+/* ---------- toolbar enxuta ---------- */
+#toolbar{gap:7px}
+.btn{white-space:nowrap}
+#toolbar select{max-width:150px}
+/* busca recolhida: só a lupa até clicar */
+#searchWrap:not(.open) > :not(#searchBtn){display:none!important}
+#searchBtn svg{display:block}
+#searchWrap.open #searchBtn{background:var(--accent);color:var(--accent-ink);border-color:transparent}
+/* contador de tabelas vira chip discreto no canto do diagrama */
+.meta-chip{position:absolute;left:12px;bottom:14px;z-index:10;font-size:11px;color:var(--muted);
+  background:#1b222dcc;border:1px solid #3a435688;border-radius:8px;padding:3px 10px;pointer-events:none}
+.meta-chip:empty{display:none}
