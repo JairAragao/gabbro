@@ -160,6 +160,8 @@ async function renderAll (opts) {
     const union = buildUnionModel(h.parentModel, h.model, h.diff)
     diagram.loadModel(union, state.positions, h.diff, { fitView: opts.fitView !== false, dirty: false })
     renderDocs(union, h.diff)
+    updateDiffNav(h.diff)          // painel MUDANÇAS (igual diff normal)
+    diagram.setDiffDim(diffDim)    // escurece o que não mudou
   } else if (state.diffOn && activeDiffTab()) {
     const { base, target } = activeDiffTab()
     const [b, t] = await Promise.all([ensureModel(base), ensureModel(target)])
@@ -174,6 +176,8 @@ async function renderAll (opts) {
     diagram.loadModel(entry.model, state.positions, null, { fitView: opts.fitView !== false, dirty: state.posDirty })
     renderDocs(entry.model, null)
     if (opts.syncEditor !== false) diagram.setEditorText(entry.text)
+    $('diffNav').classList.add('hidden') // sem diff/histórico: sem painel de mudanças
+    diagram.setDiffDim(false)
   }
   updateMeta()
   updateChrome()
@@ -191,34 +195,80 @@ async function switchBranch (b) {
   await renderAll({ fitView: true })
 }
 
+/* ---------- modo histórico (dialog quase tela cheia, 3 colunas) ---------- */
+
+const histView = { commits: [], skip: 0, hasMore: false, loading: false, active: null }
+const isSchemaCommit = c => Array.isArray(c.files) && state.config && c.files.includes(state.config.dbmlFile)
+
 async function openHistoryCommit (c) {
   try {
     if (state.diffOn) { state.diffIdx = null; setDiffUi(false) } // diff e histórico são exclusivos
-    // a lista vive no modal de configurações — fecha pra mostrar o diagrama
-    $('settingsModal').classList.add('hidden')
-    $('btnSettings').classList.remove('on')
-    const r = await api.getCommit(c.hash)
-    const model = parseDBML(r.content || '')
-    const parentModel = parseDBML(r.parentContent || '')
-    state.hist = {
-      hash: c.hash,
-      meta: r.meta || c,
-      model,
-      parentModel,
-      diff: diffModels(parentModel, model)
-    }
-    state.mode = 'view'
-    hist.setActive({ ...c, ...(r.meta || {}) })
-    setTab('diagram') // mostra o diff estrutural na hora; o detalhe fica no modal
-    await renderAll({ fitView: false })
+    $('settingsModal').classList.add('hidden'); $('btnSettings').classList.remove('on')
+    document.body.classList.add('hist-mode')
+    if (!histView.commits.length) await loadHistViewPage()
+    await showHistCommit(c.hash, c)
   } catch (e) { fail(e) }
 }
 
+async function loadHistViewPage () {
+  if (histView.loading) return
+  histView.loading = true
+  try {
+    const r = await api.getHistoryAll(histView.skip, 40)
+    const commits = (r && r.commits) || []
+    histView.skip += commits.length
+    histView.hasMore = !!(r && r.hasMore)
+    histView.commits.push(...commits)
+    renderHistSideList()
+    $('histSideMore').classList.toggle('hidden', !histView.hasMore)
+  } finally { histView.loading = false }
+}
+
+function renderHistSideList () {
+  const box = $('histSideList')
+  box.innerHTML = ''
+  for (const c of histView.commits) {
+    const schema = isSchemaCommit(c)
+    const el = document.createElement(schema ? 'button' : 'div')
+    el.className = 'hv-row' + (schema ? '' : ' locked') + (histView.active === c.hash ? ' on' : '')
+    el.title = schema ? c.message : 'Commit sem mudança de schema (posições/outros)'
+    el.innerHTML =
+      `<div class="hv-top"><span class="hist-pill mono">${escHtml(c.shortHash || '')}</span>` +
+      `<span class="hv-msg">${escHtml(hist.firstLine(c.message))}</span></div>` +
+      `<div class="hv-sub"><span>${escHtml(c.authorName || c.authorEmail || 'desconhecido')}</span>` +
+      `<span class="hist-sep">·</span><span title="${escHtml(hist.absoluteTime(c.date))}">${escHtml(hist.relativeTime(c.date))}</span></div>`
+    if (schema) el.addEventListener('click', () => showHistCommit(c.hash, c).catch(fail))
+    box.appendChild(el)
+  }
+}
+
+async function showHistCommit (hash, meta) {
+  const r = await api.getCommit(hash)
+  const model = parseDBML(r.content || '')
+  const parentModel = parseDBML(r.parentContent || '')
+  state.hist = { hash, meta: r.meta || meta || {}, model, parentModel, diff: diffModels(parentModel, model) }
+  state.mode = 'view'
+  histView.active = hash
+  renderHistSideList()
+  const m = state.hist.meta
+  $('histTopInfo').textContent = `${(m.shortHash || hash.slice(0, 7))} — ${hist.firstLine(m.message)}`
+  setTab('diagram')
+  await renderAll({ fitView: true })
+  // código: diff textual do commit (lado a lado)
+  const pre = $('histCodePre')
+  pre.textContent = 'Carregando…'
+  try {
+    const txt = await api.getCommitDiff(hash)
+    pre.innerHTML = txt.trim() ? renderDiffTextSplit(txt) : '<div class="sp-hunk">(sem diff textual)</div>'
+  } catch (e) { pre.textContent = e.message || 'falha ao carregar o código' }
+}
+
 function exitHistory () {
-  if (!state.hist) return
+  if (!document.body.classList.contains('hist-mode') && !state.hist) return
+  document.body.classList.remove('hist-mode')
   state.hist = null
-  hist.setActive(null)
-  renderAll({ fitView: false }).catch(fail)
+  histView.active = null
+  renderAll({ fitView: true }).catch(fail)
 }
 
 function setTab (tab) {
@@ -1108,6 +1158,11 @@ async function boot () {
   enhanceSelects() // dropdowns custom no tema do app (todos os <select>)
   hist.initHistory({ onOpenCommit: openHistoryCommit, onExit: exitHistory, fail })
   $('histExit').addEventListener('click', exitHistory)
+  $('histExitBtn').addEventListener('click', exitHistory)
+  $('histSideMore').addEventListener('click', () => loadHistViewPage().catch(fail))
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && document.body.classList.contains('hist-mode')) exitHistory()
+  })
 
   diagram.onPositionsChanged(pos => {
     Object.assign(state.positions.tables, pos.tables)

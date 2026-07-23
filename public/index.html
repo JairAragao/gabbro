@@ -73,20 +73,25 @@
     </div>
   </div>
 
-  <!-- Modo histórico (tela cheia): header + sidebar de commits (o diagrama e o
-       DBML ficam no #main por baixo, decorados com o diff do commit) -->
+  <!-- Modo histórico (dialog quase tela cheia): header + 3 colunas
+       (lista de commits | código git lado a lado | diagrama+mudanças no #main) -->
   <div id="histTop" class="hidden">
+    <svg class="logo-mark" aria-hidden="true"><use href="#logoMark"/></svg>
     <span class="ht-badge">HIST&Oacute;RICO</span>
     <span class="ht-info" id="histTopInfo"></span>
     <span class="spacer"></span>
-    <span class="ht-hint">Somente leitura — voc&ecirc; est&aacute; vendo um commit do passado</span>
-    <button class="btn" id="histExitBtn">&#10005; Sair do hist&oacute;rico</button>
+    <span class="ht-hint">Somente leitura &mdash; comparando o commit com o anterior</span>
+    <button class="btn" id="histExitBtn">&#10005; Sair</button>
   </div>
   <aside id="histSide" class="hidden">
-    <div class="hs-head">Commits do schema</div>
+    <div class="hs-head">Commits <span class="hs-sub">clique num commit de schema</span></div>
     <div id="histSideList" class="thin-scroll"></div>
     <button class="btn sm hidden" id="histSideMore">Carregar mais</button>
   </aside>
+  <section id="histCode" class="hidden">
+    <div class="hc-head">C&oacute;digo &mdash; commit vs anterior</div>
+    <pre id="histCodePre" class="sp thin-scroll"></pre>
+  </section>
 
   <!-- Segunda barra: abas Diagrama/Docs | abas de comparação (centro) | ações -->
   <div id="subbar">
