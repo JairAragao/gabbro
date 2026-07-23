@@ -298,6 +298,14 @@ function activateDiff (idx) {
   state.diffIdx = idx
   setDiffUi(idx != null)
   renderAll({ fitView: true }).catch(fail)
+  if (idx != null) openDiffText() // comparação abre já com o diff textual
+}
+
+function openDiffText () {
+  diffPaneOpen = true
+  $('diffPane').classList.remove('hidden')
+  $('btnDiffText').classList.add('on')
+  loadDiffText()
 }
 
 function closeDiffTab (i) {
@@ -1133,10 +1141,11 @@ async function boot () {
     diagram.setDiffDim(state.diffOn && diffDim)
   })
   $('btnDiffText').addEventListener('click', () => {
-    diffPaneOpen = !diffPaneOpen
-    $('diffPane').classList.toggle('hidden', !diffPaneOpen)
-    $('btnDiffText').classList.toggle('on', diffPaneOpen)
-    if (diffPaneOpen) loadDiffText()
+    if (diffPaneOpen) {
+      diffPaneOpen = false
+      $('diffPane').classList.add('hidden')
+      $('btnDiffText').classList.remove('on')
+    } else openDiffText()
   })
   const setDpMode = m => {
     dpMode = m
@@ -1145,7 +1154,7 @@ async function boot () {
     try { localStorage.setItem('gabbro:diff-text-mode', m) } catch (e) { /* storage cheio */ }
     paintDiffText()
   }
-  setDpMode(localStorage.getItem('gabbro:diff-text-mode') === 'split' ? 'split' : 'unified')
+  setDpMode(localStorage.getItem('gabbro:diff-text-mode') === 'unified' ? 'unified' : 'split') // padrão lado a lado
   $('dpUnified').addEventListener('click', () => setDpMode('unified'))
   $('dpSplit').addEventListener('click', () => setDpMode('split'))
   $('dpClose').addEventListener('click', () => {

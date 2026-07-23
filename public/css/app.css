@@ -100,6 +100,9 @@ body:not(.mode-edit) #btnArrange{display:none}
 #diffCtrls{display:inline-flex;align-items:center;gap:6px}
 .diff-arrow{color:var(--muted);font-size:13px}
 #btnDiff.on{background:var(--changed);color:#231a05;border-color:transparent}
+/* Destacar/Texto ativos: âmbar forte pra destacar de verdade no modo diff */
+#diffCtrls .btn.on{background:var(--changed);color:#231a05;border-color:transparent;font-weight:600}
+#diffCtrls .btn:not(.on){background:#eac16a12;border-color:#8a6d2a80;color:#ecd39a}
 
 /* ---------- banners (stacked, centered under the toolbar) ---------- */
 #banners{position:absolute;top:90px;left:50%;transform:translateX(-50%);z-index:45;
