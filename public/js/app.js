@@ -345,8 +345,12 @@ function renderTabBar () {
 
 function activateDiff (idx) {
   if (idx != null && state.hist) { state.hist = null; hist.setActive(null) } // exclusivos
+  // diff e edição são incompatíveis (diff compara o disco, ignora edição não
+  // salva) — entrar em diff sai da edição, pra não sobrepor editor + diffPane
+  if (idx != null && state.mode === 'edit') state.mode = 'view'
   state.diffIdx = idx
   setDiffUi(idx != null)
+  updateChrome() // síncrono: esconde o editor na hora (renderAll é async)
   renderAll({ fitView: true }).catch(fail)
   if (idx != null) openDiffText() // comparação abre já com o diff textual
 }
@@ -639,8 +643,10 @@ function updateLastSyncLabel () {
 
 function autosyncTick () {
   if (!syncPrefs.intervalMs || !isLocal() || state.hist) return
-  // nunca sincroniza por cima de edição não salva — em QUALQUER branch
-  if (state.dbmlDirty || state.posDirty || syncInFlight || dirtyDbmlBranches().size) return
+  // nunca sincroniza por cima de edição não salva — em QUALQUER branch — nem
+  // durante um arraste (posDirty só é setado no mouseup; re-render no meio do
+  // gesto destruiria o nó em arraste)
+  if (state.dbmlDirty || state.posDirty || syncInFlight || dirtyDbmlBranches().size || diagram.isDragging()) return
   if (Date.now() - autosyncLastTry < syncPrefs.intervalMs) return
   autosyncLastTry = Date.now()
   doSync({ quiet: true, auto: true })
@@ -1144,6 +1150,9 @@ function showWelcome (info) {
 
 function handleHash () {
   if (location.hash.startsWith('#tbl-')) {
+    // Docs é leitura — no modo edição/diff/histórico o hash não abre Docs
+    // (senão painéis se sobrepõem); só rola se já estivermos em Docs
+    if (state.mode === 'edit' || state.diffOn || state.hist) return
     const name = decodeURIComponent(location.hash.slice(5))
     if (state.tab !== 'docs') setTab('docs')
     scrollToTable(name)

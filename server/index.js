@@ -304,7 +304,9 @@ app.get('/api/history-all', wrap(async (req, res) => {
     skip: req.query.skip,
     limit: req.query.limit,
     ref,
-    allFiles: true
+    // allFiles só no modo local (o clone é do próprio usuário); no hosted
+    // ficaria um oráculo dos caminhos do repo — restringe aos arquivos rastreados
+    allFiles: cfg.mode === 'local'
   }))
 }))
 

@@ -67,8 +67,9 @@ function findGroup (key) {
 // filtro pode apontar pra algo que sumiu (ou trocou de lugar) após troca de branch/edição
 function validateFilter () {
   if (!filter) return
-  if (filter.type === 'table' && !model.tables[filter.name]) filter = null
-  if (filter.type === 'group') {
+  if (filter.type === 'table') {
+    if (!model.tables[filter.name]) filter = null
+  } else if (filter.type === 'group') {
     const g = findGroup(filter.key)
     if (!g || g.name !== filter.name) filter = null
   }

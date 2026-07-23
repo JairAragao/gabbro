@@ -91,6 +91,10 @@ function fixFor (reason) {
 // cure. Auth/network/no-remote must NOT match here.
 function isNonFastForward (msg) {
   const m = String(msg || '').toLowerCase()
+  // rejeições que um pull NÃO cura (política/permissão) — não são non-ff:
+  // sem isto, "failed to push some refs" de branch protegida/hook cairia num
+  // loop de pull+retry inútil e seria reportado como "diverged"
+  if (/remote rejected|protected branch|hook declined|pre-receive|permission|denied|forbidden|\b40[13]\b/.test(m)) return false
   return /non-fast-forward|fetch first|\[rejected\]|updates were rejected|tip of your current branch is behind|cannot lock ref|failed to push some refs/.test(m)
 }
 
@@ -113,6 +117,15 @@ async function pullRebase () {
   try {
     const remotes = (await git(['remote'])).split('\n').map(s => s.trim()).filter(Boolean)
     if (!remotes.length) return { ok: false, reason: 'no-remote', detail: 'nenhum remoto configurado (origin ausente)' }
+    // rebase pré-existente do usuário: não iniciar o nosso (o catch abortaria o
+    // dele). Detecta o diretório de rebase antes de tocar em qualquer coisa.
+    const rebaseDir = async name => {
+      const p = (await git(['rev-parse', '--git-path', name])).trim()
+      return p && fs.existsSync(path.resolve(cfg.repoDir(), p))
+    }
+    if ((await rebaseDir('rebase-merge')) || (await rebaseDir('rebase-apply'))) {
+      return { ok: false, reason: 'diverged', detail: 'há um rebase em andamento no repositório — finalize ou aborte antes de sincronizar (git rebase --continue / --abort)' }
+    }
     const out = await git(['pull', '--rebase', '--autostash'])
 
     // `--autostash` can exit 0 even when the stash re-apply conflicts, leaving
