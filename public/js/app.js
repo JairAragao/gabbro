@@ -670,7 +670,10 @@ function initSettingsUi () {
   autosaveLastTry = Date.now()
   autosyncLastTry = Date.now()
   const btn = $('btnSettings'), modal = $('settingsModal')
-  const open = () => { modal.classList.remove('hidden'); btn.classList.add('on'); updateLastSyncLabel() }
+  const open = () => {
+    modal.classList.remove('hidden'); btn.classList.add('on'); updateLastSyncLabel()
+    $('routesOn').checked = diagram.getOrthoAvoid() // pode ter mudado pelo botão Rotas
+  }
   const close = () => { modal.classList.add('hidden'); btn.classList.remove('on') }
   btn.addEventListener('click', () => modal.classList.contains('hidden') ? open() : close())
   $('settingsClose').addEventListener('click', close)
@@ -703,6 +706,9 @@ function initSettingsUi () {
     autosaveLastTry = Date.now()
     savePositions()
   }, 1000)
+
+  // Geral — roteamento das linhas (mesmo estado do botão Rotas)
+  $('routesOn').addEventListener('change', () => diagram.setOrthoAvoid($('routesOn').checked))
 
   // Sincronização — intervalo + estratégia
   const asel = $('autosyncSel'), ssel = $('strategySel')

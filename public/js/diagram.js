@@ -579,6 +579,15 @@ function applyFocus (name) {
     e.dA.classList.toggle('dim', on && !inv); e.dB.classList.toggle('dim', on && !inv)
   })
 }
+// linhas nunca atrás de tabela (A* com desvio) — parametrizável e persistido
+export function setOrthoAvoid (on) {
+  orthoAvoid = !!on
+  $('btnOrtho').classList.toggle('on', orthoAvoid)
+  try { localStorage.setItem('gabbro:routes', orthoAvoid ? '1' : '0') } catch (e) { /* storage cheio */ }
+  if (model) recomputeRoutes()
+}
+export function getOrthoAvoid () { return orthoAvoid }
+
 export function setHoverHighlight (on) {
   hoverEnabled = on
   clearTimeout(hoverTimer)
@@ -1056,8 +1065,9 @@ export function initDiagram (opts) {
   $('zin').addEventListener('click', () => { scale = Math.min(3, scale * 1.15); applyTransform() })
   $('zout').addEventListener('click', () => { scale = Math.max(0.08, scale / 1.15); applyTransform() })
   $('btnFit').addEventListener('click', () => fit())
-  $('btnOrtho').addEventListener('click', () => { orthoAvoid = !orthoAvoid; $('btnOrtho').classList.toggle('on', orthoAvoid); if (model) recomputeRoutes() })
-  $('btnOrtho').classList.add('on')
+  // roteamento com desvio: persistido; o botão Rotas e a config Geral controlam o mesmo estado
+  $('btnOrtho').addEventListener('click', () => setOrthoAvoid(!orthoAvoid))
+  setOrthoAvoid(localStorage.getItem('gabbro:routes') !== '0')
   // grade de fundo: preferência persistida (padrão ligada)
   const gridOff = localStorage.getItem('gabbro:grid') === '0'
   viewport.classList.toggle('no-grid', gridOff)
