@@ -27,10 +27,12 @@ function git (args, opts = {}) {
       maxBuffer: 64 * 1024 * 1024,
       // Never hang waiting for a password prompt — fail fast instead (push/
       // fetch against an authenticated remote without a credential helper).
-      env: { ...process.env, GIT_TERMINAL_PROMPT: '0' }
+      // LC_ALL=C: a classificação de erro (classifyReason/isNonFastForward e
+      // as regex de logAll/showAt) depende das mensagens do git em inglês.
+      env: { ...process.env, GIT_TERMINAL_PROMPT: '0', LC_ALL: 'C', LANG: 'C' }
     }, (err, stdout, stderr) => {
       if (err) {
-        const e = new Error(sanitize(`git ${args[0]} failed: ${(stderr || err.message).trim()}`))
+        const e = new Error(sanitize(`git ${args[0]} falhou: ${(stderr || err.message).trim()}`))
         reject(e)
       } else {
         resolve(stdout)
@@ -104,7 +106,7 @@ async function showFileRaw (ref, file) {
 
 async function showFile (branch, file) {
   if (!BRANCH_RE.test(branch)) {
-    const e = new Error('invalid branch name')
+    const e = new Error('nome de branch inválido')
     e.status = 400
     throw e
   }
@@ -247,18 +249,23 @@ async function doCommitPush (file, content, message) {
 
 // Field separator \x1f, record marker \x1e (never appear in commit metadata).
 // Asks for limit+1 to know hasMore without a separate count.
-async function logAll ({ skip = 0, limit = 30, file = null, ref = 'HEAD' } = {}) {
+async function logAll ({ skip = 0, limit = 30, file = null, ref = 'HEAD', allFiles = false } = {}) {
   const off = Math.max(0, Number(skip) || 0)
   const lim = Math.min(200, Math.max(1, Number(limit) || 30))
   const MARK = '\x1eCMT\x1f'
   const FMT = `${MARK}%H%x1f%h%x1f%aI%x1f%an%x1f%ae%x1f%s`
   const paths = file ? [file] : [cfg.dbmlFile, cfg.positionsFile]
+  const args = [
+    'log', `--format=${FMT}`, '--name-only',
+    `--skip=${off}`, `--max-count=${lim + 1}`, ref
+  ]
+  // '--' sempre: sem ele um arquivo no worktree com o nome do ref (ex.: HEAD)
+  // torna o `git log <ref>` ambíguo
+  args.push('--')
+  if (!allFiles) args.push(...paths)
   let out
   try {
-    out = await git([
-      'log', `--format=${FMT}`, '--name-only',
-      `--skip=${off}`, `--max-count=${lim + 1}`, ref, '--', ...paths
-    ])
+    out = await git(args)
   } catch (e) {
     if (/does not have any commits|bad revision|unknown revision/i.test(e.message)) {
       return { commits: [], hasMore: false }
@@ -311,7 +318,7 @@ async function resolveRev (expr) {
 // git, then resolves to the full SHA ('' when unknown → route answers 404).
 async function resolveCommit (hash) {
   if (!/^[0-9a-f]{4,40}$/i.test(String(hash || ''))) {
-    const e = new Error('invalid commit hash')
+    const e = new Error('hash de commit inválido')
     e.status = 400
     throw e
   }
