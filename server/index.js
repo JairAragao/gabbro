@@ -42,9 +42,9 @@ if (cfg.mode === 'local') {
 app.use('/api', (req, res, next) => {
   if (req.path === '/health' || req.path === '/repo') return next()
   if (!cfg.configured()) {
-    return res.status(409).json({ error: 'no repository configured', code: 'unconfigured' })
+    return res.status(409).json({ error: 'nenhum repositório configurado', code: 'unconfigured' })
   }
-  if (!repo.state.repoCloned) return res.status(503).json({ error: 'repository not ready' })
+  if (!repo.state.repoCloned) return res.status(503).json({ error: 'repositório ainda não está pronto' })
   next()
 })
 
@@ -58,12 +58,16 @@ app.get('/api/health', (req, res) => {
 })
 
 app.get('/api/config', wrap(async (req, res) => {
+  const saved = settings.read()
   const base = {
     mode: cfg.mode,
     dbmlFile: cfg.dbmlFile,
     editBranch: cfg.editBranch,
     repoName: cfg.repoName,
-    repoPath: cfg.mode === 'local' ? cfg.repoDir() : null
+    repoPath: cfg.mode === 'local' ? cfg.repoDir() : null,
+    // fonte da verdade do intervalo de auto-update (persistido pelo Electron);
+    // localStorage não serve — a origem muda a cada launch (porta efêmera)
+    updateIntervalMs: Number.isFinite(Number(saved.updateIntervalMs)) ? Number(saved.updateIntervalMs) : null
   }
   if (cfg.mode === 'local') {
     const id = await local.getIdentity()
@@ -88,7 +92,7 @@ app.get('/api/branches', wrap(async (req, res) => {
 app.get('/api/dbml/:branch', wrap(async (req, res) => {
   await repo.fetchIfStale(false)
   const content = await repo.showFile(req.params.branch, cfg.dbmlFile)
-  if (content === null) return res.status(404).json({ error: 'branch or file not found' })
+  if (content === null) return res.status(404).json({ error: 'branch ou arquivo não encontrado' })
   res.type('text/plain').send(content)
 }))
 
@@ -117,7 +121,7 @@ app.get('/api/positions', wrap(async (req, res) => {
 function requireBranch (body) {
   const b = body && body.branch
   if (typeof b !== 'string' || !b.trim()) {
-    const e = new Error('body must include branch (the branch being edited)')
+    const e = new Error('o body precisa incluir branch (a branch em edição)')
     e.status = 400
     throw e
   }
@@ -127,7 +131,7 @@ function requireBranch (body) {
 app.put('/api/dbml', wrap(async (req, res) => {
   const { content, message } = req.body || {}
   if (typeof content !== 'string' || !content.trim()) {
-    return res.status(400).json({ error: 'body must be {content: string, message?: string}' })
+    return res.status(400).json({ error: 'o body precisa ser {content: string, message?: string}' })
   }
   const msg = typeof message === 'string' && message.trim()
     ? message.replace(/\s+/g, ' ').trim().slice(0, 200)
@@ -151,7 +155,7 @@ app.put('/api/positions', wrap(async (req, res) => {
       typeof t.x !== 'number' || !Number.isFinite(t.x) ||
       typeof t.y !== 'number' || !Number.isFinite(t.y))
   if (badShape) {
-    return res.status(400).json({ error: 'body must be {version: number, tables: {name: {x: number, y: number}}}' })
+    return res.status(400).json({ error: 'o body precisa ser {version: number, tables: {nome: {x: number, y: number}}}' })
   }
   const branch = cfg.mode === 'local' ? requireBranch(req.body) : null
   delete p.branch // transport-only field — must never land in the committed file
@@ -172,7 +176,7 @@ app.post('/api/refresh', wrap(async (req, res) => {
 
 function localOnly (res) {
   if (cfg.mode !== 'local') {
-    res.status(400).json({ error: 'this endpoint is local-mode only' })
+    res.status(400).json({ error: 'este endpoint só existe no modo local' })
     return false
   }
   return true
@@ -180,7 +184,8 @@ function localOnly (res) {
 
 app.post('/api/sync', wrap(async (req, res) => {
   if (!localOnly(res)) return
-  const r = await local.sync()
+  const strategy = req.body && req.body.strategy === 'safe' ? 'safe' : 'rebase'
+  const r = await local.sync(strategy)
   repo.state.lastFetch = Date.now()
   res.json({ ...r, syncState: await local.syncState() })
 }))
@@ -189,6 +194,12 @@ app.get('/api/sync-state', wrap(async (req, res) => {
   if (!localOnly(res)) return
   await repo.fetchIfStale(false) // best-effort in local mode (never throws)
   res.json(await local.syncState())
+}))
+
+app.get('/api/git-health', wrap(async (req, res) => {
+  if (!localOnly(res)) return
+  await repo.fetchIfStale(false) // ahead/behind honestos sem custo extra
+  res.json(await local.gitHealth())
 }))
 
 app.get('/api/repo', (req, res) => {
@@ -212,11 +223,11 @@ app.put('/api/repo', wrap(async (req, res) => {
   if (!localOnly(res)) return
   const p = req.body && req.body.path
   if (typeof p !== 'string' || !p.trim()) {
-    return res.status(400).json({ error: 'body must be {path: string}' })
+    return res.status(400).json({ error: 'o body precisa ser {path: string}' })
   }
   const abs = path.resolve(p.trim())
   if (!fs.existsSync(path.join(abs, '.git'))) {
-    return res.status(400).json({ error: `not a git repository (missing .git): ${abs}` })
+    return res.status(400).json({ error: `não é um repositório git (sem .git): ${abs}` })
   }
   // Serialized so the switch never lands mid-commit of the previous repo.
   await repo.serialize(async () => {
@@ -236,7 +247,7 @@ app.put('/api/repo', wrap(async (req, res) => {
 function historyFile (q) {
   if (!q) return null
   if (q !== cfg.dbmlFile && q !== cfg.positionsFile) {
-    const e = new Error(`file must be ${cfg.dbmlFile} or ${cfg.positionsFile}`)
+    const e = new Error(`o arquivo precisa ser ${cfg.dbmlFile} ou ${cfg.positionsFile}`)
     e.status = 400
     throw e
   }
@@ -248,7 +259,7 @@ async function historyRef (branchQ) {
     if (!branchQ) return 'HEAD'
     const branches = await repo.listBranches()
     if (!branches.includes(branchQ)) {
-      const e = new Error('branch not found')
+      const e = new Error('branch não encontrada')
       e.status = 404
       throw e
     }
@@ -258,7 +269,7 @@ async function historyRef (branchQ) {
   const b = branchQ || cfg.editBranch
   const branches = await repo.listBranches()
   if (!branches.includes(b)) {
-    const e = new Error('branch not found')
+    const e = new Error('branch não encontrada')
     e.status = 404
     throw e
   }
@@ -275,11 +286,32 @@ app.get('/api/history', wrap(async (req, res) => {
   }))
 }))
 
+// Todos os commits do repositório (qualquer arquivo) — aba Histórico das
+// Configurações. Metadados de commit apenas, nunca conteúdo de arquivo.
+app.get('/api/history-all', wrap(async (req, res) => {
+  const ref = await historyRef(req.query.branch)
+  res.json(await repo.logAll({
+    skip: req.query.skip,
+    limit: req.query.limit,
+    ref,
+    allFiles: true
+  }))
+}))
+
+// Versão instalada + CHANGELOG.md empacotado — aba Atualizações.
+app.get('/api/changelog', (req, res) => {
+  let markdown = ''
+  try { markdown = fs.readFileSync(path.join(__dirname, '..', 'CHANGELOG.md'), 'utf8') } catch { markdown = '' }
+  let version = ''
+  try { version = require('../package.json').version || '' } catch { version = '' }
+  res.json({ version, markdown })
+})
+
 // Content + parent content of one tracked file at a commit — the front parses
 // both and renders the structural diff. Root commit → parentContent ''.
 app.get('/api/commit/:hash', wrap(async (req, res) => {
   const full = await repo.resolveCommit(req.params.hash)
-  if (!full) return res.status(404).json({ error: 'commit not found' })
+  if (!full) return res.status(404).json({ error: 'commit não encontrado' })
   const file = historyFile(req.query.file) || cfg.dbmlFile
   const [content, parentContent, meta] = await Promise.all([
     repo.showAt(full, file),
@@ -291,7 +323,7 @@ app.get('/api/commit/:hash', wrap(async (req, res) => {
 
 app.get('/api/commit/:hash/diff', wrap(async (req, res) => {
   const full = await repo.resolveCommit(req.params.hash)
-  if (!full) return res.status(404).json({ error: 'commit not found' })
+  if (!full) return res.status(404).json({ error: 'commit não encontrado' })
   const file = historyFile(req.query.file) || cfg.dbmlFile
   res.type('text/plain').send(await repo.diffFile(full, file))
 }))
