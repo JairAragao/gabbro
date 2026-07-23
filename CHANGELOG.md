@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.6.3 — 2026-07-23
+
+Revisão de usabilidade (correções).
+
+- **Diff durante a edição** — abrir uma comparação agora sai do modo edição, em vez de deixar
+  o editor de DBML e o painel de diff sobrepostos.
+- **Docs travava** — o modo Docs quebrava (tela em branco) ao trocar para uma branch onde a
+  tabela filtrada não existe; e o hash de tabela não abre mais Docs no meio da edição/diff/histórico.
+- **Auto-sync no arraste** — a sincronização automática não dispara mais durante um arraste de
+  tabela (evitava a tabela sumir/saltar no meio do gesto).
+- **Sync** — rejeição de push por branch protegida/hook deixa de ser tratada como divergência
+  (fim do loop de tentativas e da mensagem errada); e um rebase já em andamento no repositório
+  é respeitado, não abortado.
+- Ajuste: o histórico "todos os arquivos" fica restrito ao modo local; botão "Realce".
+
 ## 0.6.2 — 2026-07-23
 
 Janela nativa, topo redesenhado e histórico em tela cheia.
