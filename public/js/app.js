@@ -33,15 +33,17 @@ function toast (msg, type) {
   clearTimeout(toastTimer)
   toastTimer = setTimeout(() => { el.className = '' }, type ? 6000 : 3500)
 }
-const fail = e => toast(e && e.message ? e.message : 'unexpected error', 'error')
+const fail = e => toast(e && e.message ? e.message : 'erro inesperado', 'error')
 // Accumulated push warning from the server ({reason, detail, fix}) — yellow,
 // non-blocking: the commit itself succeeded.
 function warnToast (w) {
   if (!w) return
-  toast(`push pending (${w.reason}): ${w.detail || ''}${w.fix ? ' — ' + w.fix : ''}`, 'warn')
+  toast(`push pendente (${w.reason}): ${w.detail || ''}${w.fix ? ' — ' + w.fix : ''}`, 'warn')
 }
 
-const draftKey = b => 'gabbro:' + b
+// prefixo próprio: clearDrafts() NÃO pode varrer 'gabbro:*' inteiro — as
+// preferências (autosave, sync-prefs, update-interval, tab, mini-mode) moram lá
+const draftKey = b => 'gabbro:draft:' + b
 
 async function ensureModel (b, force) {
   if (!force && state.models.has(b)) return state.models.get(b)
@@ -67,7 +69,7 @@ function clearDrafts () {
   const gone = []
   for (let i = 0; i < localStorage.length; i++) {
     const k = localStorage.key(i)
-    if (k && k.startsWith('gabbro:')) gone.push(k)
+    if (k && k.startsWith('gabbro:draft:')) gone.push(k)
   }
   gone.forEach(k => localStorage.removeItem(k))
 }
@@ -76,13 +78,25 @@ const isLocal = () => state.config && state.config.mode === 'local'
 // The only branch that accepts writes: local → the checked-out branch,
 // hosted → EDIT_BRANCH (v1 behavior untouched).
 function editableBranch () {
+  if (!state.config) return null
   return isLocal() ? state.currentBranch : state.config.editBranch
 }
 function canEdit () {
-  return state.mode === 'edit' && !state.diffOn && !state.hist &&
+  return !!state.config && state.mode === 'edit' && !state.diffOn && !state.hist &&
     !state.config.readOnly && state.branch === editableBranch()
 }
+// Branches com edição de DBML não salva (texto do cache difere do baseline).
+// A flag dbmlDirty é só da branch ATUAL — cache sujo de outra branch vive aqui.
+function dirtyDbmlBranches () {
+  const out = new Set()
+  for (const [b, e] of state.models) {
+    const base = state.baselines.get(b)
+    if (base && e.text !== base.text) out.add(b)
+  }
+  return out
+}
 function updateChrome () {
+  if (!state.config) return // boot falhou/incompleto — sem chrome pra atualizar
   const editing = state.mode === 'edit' && !state.diffOn && !state.hist
   document.body.classList.toggle('mode-view', !editing)
   document.body.classList.toggle('mode-edit', editing)
@@ -104,8 +118,8 @@ function updateChrome () {
   const banner = $('banner')
   if (editing && state.branch !== editableBranch()) {
     banner.textContent = editableBranch()
-      ? `read-only branch — switch to ${editableBranch()} to edit`
-      : 'repository is in detached HEAD — checkout a branch to edit'
+      ? `branch somente leitura — troque para ${editableBranch()} para editar`
+      : 'repositório em detached HEAD — faça checkout de uma branch para editar'
     banner.classList.remove('hidden')
   } else banner.classList.add('hidden')
 
@@ -115,7 +129,7 @@ function updateChrome () {
   if (state.hist) {
     const m = state.hist.meta
     $('histBannerText').textContent =
-      `Viewing commit ${m.shortHash || state.hist.hash.slice(0, 7)} — ${hist.firstLine(m.message)}`
+      `Visualizando commit ${m.shortHash || state.hist.hash.slice(0, 7)} — ${hist.firstLine(m.message)}`
     hb.classList.remove('hidden')
   } else hb.classList.add('hidden')
 
@@ -123,7 +137,7 @@ function updateChrome () {
 }
 function updateMeta () {
   const s = diagram.getStats()
-  $('meta').textContent = s ? `${s.tables} tables · ${s.groups} groups · ${s.refs} refs` : ''
+  $('meta').textContent = s ? `${s.tables} tabelas · ${s.groups} grupos · ${s.refs} refs` : ''
 }
 
 async function renderAll (opts) {
@@ -156,7 +170,9 @@ async function switchBranch (b) {
   if (state.hist) { state.hist = null; hist.setActive(null) } // picking a branch leaves history mode
   state.branch = b
   $('branchSel').value = b
-  state.dbmlDirty = false
+  // edição não salva vive no cache por branch — voltar pra uma branch suja
+  // reativa a flag (e o botão Salvar), em vez de zerar incondicionalmente
+  state.dbmlDirty = dirtyDbmlBranches().has(b)
   applyDraft(b)
   await renderAll({ fitView: true })
 }
@@ -205,7 +221,7 @@ function fillSelect (sel, branches, value, currentB) {
   for (const b of branches) {
     const o = document.createElement('option')
     o.value = b
-    o.textContent = currentB && b === currentB ? `${b} (current)` : b
+    o.textContent = currentB && b === currentB ? `${b} (atual)` : b
     sel.appendChild(o)
   }
   if (value && branches.includes(value)) sel.value = value
@@ -230,28 +246,48 @@ async function toggleDiff (on) {
   } catch (e) { fail(e) }
 }
 
+// Recarrega o cache de modelos preservando edição de DBML não salva (em
+// qualquer branch): entries sujas sobrevivem e ganham baseline novo do disco.
+// Retorna o Map das branches preservadas — usado pra decidir syncEditor.
+async function reloadModelsKeepDirty () {
+  const kept = new Map()
+  for (const b of dirtyDbmlBranches()) kept.set(b, state.models.get(b))
+  state.models.clear()
+  state.baselines.clear()
+  for (const [b, e] of kept) {
+    state.models.set(b, e)
+    try {
+      const text = await api.getDbml(b)
+      state.baselines.set(b, { text, model: parseDBML(text) })
+    } catch (e2) { /* branch pode ter sumido — segue sem baseline */ }
+  }
+  return kept
+}
+
 async function doRefresh () {
   const btn = $('btnRefresh')
   btn.disabled = true
   try {
     await api.refresh()
-    state.models.clear()
+    const kept = await reloadModelsKeepDirty()
+    state.dbmlDirty = kept.has(state.branch)
     state.branches = await api.getBranches()
     fillBranchSelects()
     if (!state.posDirty) {
       const p = await api.getPositions()
       if (p && p.tables) state.positions = { version: p.version || 1, tables: p.tables }
     }
-    await renderAll({ fitView: false })
+    await renderAll({ fitView: false, syncEditor: !kept.has(state.branch) })
     if (state.tab === 'history') hist.reload().catch(() => { /* best-effort */ })
     else hist.invalidate()
     refreshSyncBadge()
-    toast('refreshed from remote')
+    if (kept.size) toast('atualizado — sua edição de DBML não salva foi preservada no editor', 'warn')
+    else toast('atualizado do remoto')
   } catch (e) { fail(e) } finally { btn.disabled = false }
 }
 
 function saveFail (e) {
-  if (e && e.status === 409) toast('branch changed underneath — reload the page', 'error')
+  if (e && e.status === 409) toast('a branch mudou por fora — recarregue a página', 'error')
   else fail(e)
   updateChrome()
 }
@@ -265,7 +301,7 @@ async function saveDbml () {
   if (base) {
     try { prefill = diffSummaryLine(diffModels(base.model, parseDBML(text))) } catch (e) { /* parse error — no prefill */ }
   }
-  const message = window.prompt('Commit message (optional):', prefill)
+  const message = window.prompt('Mensagem do commit (opcional):', prefill)
   if (message === null) return
   const btn = $('btnSaveDbml')
   btn.disabled = true
@@ -276,16 +312,18 @@ async function saveDbml () {
     state.baselines.set(state.branch, entry)
     state.dbmlDirty = false
     updateChrome()
-    toast(`DBML committed to ${res.branch} (${String(res.commit).slice(0, 7)})`)
+    toast(`DBML commitado em ${res.branch} (${String(res.commit).slice(0, 7)})`)
     warnToast(res.warning)
     refreshSyncBadge()
   } catch (e) { saveFail(e) }
 }
 
+let posSaveInFlight = false
 async function savePositions () {
-  if (!canEdit()) return
+  if (!canEdit() || posSaveInFlight) return
   const btn = $('btnSavePos')
   btn.disabled = true
+  posSaveInFlight = true
   try {
     Object.assign(state.positions.tables, diagram.getDirtyPositions().tables)
     const res = await api.putPositions(state.positions, isLocal() ? state.branch : undefined)
@@ -293,10 +331,379 @@ async function savePositions () {
     state.posDirty = false
     diagram.clearDirty()
     updateChrome()
-    toast(`positions committed to ${res.branch} (${String(res.commit).slice(0, 7)})`)
+    toast(`posições commitadas em ${res.branch} (${String(res.commit).slice(0, 7)})`)
     warnToast(res.warning)
     refreshSyncBadge()
-  } catch (e) { saveFail(e) }
+  } catch (e) { saveFail(e) } finally { posSaveInFlight = false }
+}
+
+/* ---------- salvamento automático de posições (configurável) ---------- */
+
+const AUTOSAVE_KEY = 'gabbro:autosave'
+const autosave = { on: false, secs: 30 }
+let autosaveLastTry = 0
+
+function loadAutosave () {
+  try {
+    const raw = JSON.parse(localStorage.getItem(AUTOSAVE_KEY))
+    if (raw && typeof raw === 'object') {
+      autosave.on = !!raw.on
+      const s = Number(raw.secs)
+      if (Number.isFinite(s)) autosave.secs = Math.max(5, Math.min(3600, Math.round(s)))
+    }
+  } catch (e) { /* config corrompida — usa o padrão */ }
+}
+function persistAutosave () {
+  try { localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(autosave)) } catch (e) { /* storage cheio */ }
+}
+
+/* ---------- sincronização automática + estratégia de conflito ---------- */
+
+const SYNC_PREFS_KEY = 'gabbro:sync-prefs'
+const syncPrefs = { intervalMs: 0, strategy: 'rebase' }
+let autosyncLastTry = 0
+
+const STRATEGY_HINTS = {
+  rebase: 'O remoto vence: rebase automático das suas mudanças por cima dele, com aviso quando não der.',
+  safe: 'Só aplica quando dá fast-forward; divergência não toca seus arquivos e te avisa.',
+  ask: 'Em divergência o Gabbro pergunta o que fazer (no sync automático, só avisa).'
+}
+
+function loadSyncPrefs () {
+  try {
+    const raw = JSON.parse(localStorage.getItem(SYNC_PREFS_KEY))
+    if (raw && typeof raw === 'object') {
+      const ms = Number(raw.intervalMs)
+      if ([0, 60000, 300000, 900000].includes(ms)) syncPrefs.intervalMs = ms
+      if (['rebase', 'safe', 'ask'].includes(raw.strategy)) syncPrefs.strategy = raw.strategy
+    }
+  } catch (e) { /* prefs corrompidas — usa o padrão */ }
+}
+function persistSyncPrefs () {
+  try { localStorage.setItem(SYNC_PREFS_KEY, JSON.stringify(syncPrefs)) } catch (e) { /* storage cheio */ }
+}
+
+function updateLastSyncLabel () {
+  const el = $('lastSyncLbl')
+  if (!el) return
+  if (!lastSyncAt) { el.textContent = '—'; return }
+  const d = new Date(lastSyncAt)
+  const pad = n => String(n).padStart(2, '0')
+  el.textContent = `${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+function autosyncTick () {
+  if (!syncPrefs.intervalMs || !isLocal() || state.hist) return
+  // nunca sincroniza por cima de edição não salva — em QUALQUER branch
+  if (state.dbmlDirty || state.posDirty || syncInFlight || dirtyDbmlBranches().size) return
+  if (Date.now() - autosyncLastTry < syncPrefs.intervalMs) return
+  autosyncLastTry = Date.now()
+  doSync({ quiet: true, auto: true })
+}
+
+/* ---------- saúde do git (aba Sincronização) ---------- */
+
+async function loadGitHealth () {
+  if (!isLocal()) return
+  const btn = $('ghRefresh')
+  btn.disabled = true
+  try {
+    const h = await api.getGitHealth()
+    const pill = $('ghPill')
+    pill.classList.remove('hidden')
+    pill.textContent = h.ok ? 'tudo OK' : 'atenção'
+    pill.classList.toggle('warn', !h.ok)
+    $('ghMeta').innerHTML =
+      `<span>branch: <b>${escHtml(h.branch || '—')}</b></span>` +
+      `<span>usuário: <b>${h.identity ? escHtml(h.identity.name + ' <' + h.identity.email + '>') : '— não configurado'}</b></span>` +
+      `<span>remoto: <b>${escHtml(h.remoteUrl || '— nenhum')}</b></span>`
+    const ul = $('ghChecks')
+    ul.innerHTML = ''
+    for (const c of h.checks || []) {
+      const li = document.createElement('li')
+      li.className = 'gh-check' + (c.ok ? '' : ' bad')
+      li.innerHTML = `<span class="gh-ico">${c.ok ? '✓' : '✕'}</span>` +
+        `<span class="gh-txt"><span class="gh-lbl">${escHtml(c.label)}</span>` +
+        `<span class="gh-det" title="${escHtml(c.detail || '')}">${escHtml(c.detail || '')}</span></span>`
+      ul.appendChild(li)
+    }
+  } catch (e) {
+    $('ghChecks').innerHTML = `<li class="gh-check bad"><span class="gh-ico">✕</span><span class="gh-txt"><span class="gh-lbl">Falha ao consultar o git</span><span class="gh-det">${escHtml(e.message || '')}</span></span></li>`
+  } finally { btn.disabled = false }
+}
+
+const escHtml = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
+
+/* ---------- histórico completo do repositório (aba Histórico) ---------- */
+
+const allHist = { commits: [], skip: 0, hasMore: false, loaded: false, loading: false }
+
+async function loadAllHistPage () {
+  if (allHist.loading) return
+  allHist.loading = true
+  const btn = $('allHistMore')
+  btn.disabled = true
+  try {
+    const r = await api.getHistoryAll(allHist.skip, 30)
+    const commits = (r && r.commits) || []
+    allHist.skip += commits.length
+    allHist.hasMore = !!(r && r.hasMore)
+    allHist.commits.push(...commits)
+    renderAllHistRows(commits)
+    $('allHistEmpty').classList.toggle('hidden', allHist.commits.length > 0)
+    btn.classList.toggle('hidden', !allHist.hasMore)
+    allHist.loaded = true
+  } catch (e) { fail(e) } finally {
+    allHist.loading = false
+    btn.disabled = false
+  }
+}
+
+function renderAllHistRows (commits) {
+  const ul = $('allHistList')
+  for (const c of commits) {
+    const li = document.createElement('li')
+    li.className = 'ah-row'
+    const files = c.files || []
+    li.innerHTML =
+      `<div class="ah-top"><span class="hist-pill mono">${escHtml(c.shortHash || '')}</span>` +
+      `<span class="ah-msg" title="${escHtml(c.message || '')}">${escHtml(hist.firstLine(c.message))}</span></div>` +
+      `<div class="ah-sub"><span>${escHtml(c.authorName || c.authorEmail || 'desconhecido')}</span>` +
+      `<span class="hist-sep">·</span><span title="${escHtml(hist.absoluteTime(c.date))}">${escHtml(hist.relativeTime(c.date))}</span>` +
+      `<span class="hist-sep">·</span><span>${files.length} arquivo${files.length === 1 ? '' : 's'}</span>` +
+      `<span class="ah-files mono" title="${escHtml(files.join('\n'))}">${escHtml(files.slice(0, 3).join(' · '))}${files.length > 3 ? ' …' : ''}</span></div>`
+    ul.appendChild(li)
+  }
+}
+
+/* ---------- atualizações (aba Atualizações) ---------- */
+
+const UPD_INTERVAL_KEY = 'gabbro:update-interval'
+const UPD_INTERVALS = ['0', '1800000', '3600000', '10800000', '21600000', '86400000']
+const UPD_STATE_LABELS = {
+  idle: 'Pronto para verificar.',
+  checking: 'Verificando atualizações…',
+  uptodate: 'Você está na versão mais recente.',
+  available: 'Baixando atualização…',
+  downloading: 'Baixando atualização…',
+  downloaded: 'Atualização pronta para instalar.',
+  error: 'Falha ao verificar atualização.'
+}
+let changelogLoaded = false
+
+function loadUpdInterval () {
+  try {
+    const v = localStorage.getItem(UPD_INTERVAL_KEY)
+    return UPD_INTERVALS.includes(v) ? v : '10800000'
+  } catch (e) { return '10800000' }
+}
+
+function applyUpdStatus (s) {
+  if (!s || !s.state) return
+  const row = $('updStatusRow')
+  row.classList.remove('hidden')
+  const label = s.state === 'downloading' && s.percent
+    ? `Baixando atualização… ${s.percent}%`
+    : (UPD_STATE_LABELS[s.state] || '')
+  $('updStatus').textContent = label
+  const dot = $('updDot')
+  dot.className = 'upd-dot ' + (
+    ['downloaded', 'available', 'downloading'].includes(s.state) ? 'busy'
+      : s.state === 'uptodate' ? 'ok'
+        : s.state === 'error' ? 'err' : '')
+  $('updInstall').classList.toggle('hidden', s.state !== 'downloaded')
+  $('updCheck').disabled = s.state === 'checking' || s.state === 'downloading'
+}
+
+async function loadChangelog () {
+  const box = $('changelogList')
+  box.innerHTML = '<p class="sm-empty">Carregando…</p>'
+  try {
+    const r = await api.getChangelog()
+    $('updVersion').textContent = r.version ? 'v' + r.version : '—'
+    const versions = parseChangelog(r.markdown || '')
+    if (!versions.length) { box.innerHTML = '<p class="sm-empty">Sem changelog.</p>'; return }
+    box.innerHTML = ''
+    for (const v of versions) {
+      const sec = document.createElement('div')
+      sec.className = 'cl-ver'
+      let html = `<div class="cl-ver-head"><span class="cl-tag">${escHtml(v.tag)}</span>` +
+        (v.date ? `<span class="cl-date">${escHtml(v.date)}</span>` : '') +
+        (r.version && v.tag === 'v' + r.version ? '<span class="cl-current">atual</span>' : '') + '</div>'
+      for (const blk of v.blocks) {
+        if (blk.type === 'head') html += `<div class="cl-head">${escHtml(blk.text)}</div>`
+        else if (blk.type === 'list') html += '<ul class="cl-items">' + blk.items.map(it => `<li>${escHtml(it)}</li>`).join('') + '</ul>'
+        else html += `<p class="cl-p">${escHtml(blk.text)}</p>`
+      }
+      sec.innerHTML = html
+      box.appendChild(sec)
+    }
+    changelogLoaded = true
+  } catch (e) {
+    box.innerHTML = `<p class="sm-empty">${escHtml(e.message || 'Falha ao carregar o changelog.')}</p>`
+  }
+}
+
+// parse leve do keep-a-changelog: "## [x] - data" vira versão; blocos = '###',
+// listas '-' ou parágrafos (padrão portado do Basalt).
+function parseChangelog (md) {
+  const out = []
+  let cur = null
+  let list = null
+  const pushList = () => { if (list && list.items.length) cur.blocks.push(list); list = null }
+  for (const raw of String(md || '').split(/\r?\n/)) {
+    const line = raw.replace(/\s+$/, '')
+    const mv = /^##\s+\[?([^\]]+?)\]?\s*(?:[-—]\s*(.+))?$/.exec(line)
+    if (/^##\s+/.test(line) && mv) {
+      if (cur) pushList()
+      const ver = (mv[1] || '').trim()
+      cur = { tag: /^\d/.test(ver) ? 'v' + ver : ver, date: (mv[2] || '').trim(), blocks: [] }
+      out.push(cur)
+      continue
+    }
+    if (!cur) continue
+    if (/^###\s+/.test(line)) { pushList(); cur.blocks.push({ type: 'head', text: line.replace(/^###\s+/, '') }); continue }
+    const mi = /^[-*]\s+(.+)/.exec(line)
+    if (mi) { if (!list) list = { type: 'list', items: [] }; list.items.push(mi[1].replace(/\*\*/g, '')); continue }
+    if (!line.trim()) { pushList(); continue }
+    pushList()
+    cur.blocks.push({ type: 'p', text: line.replace(/\*\*/g, '') })
+  }
+  if (cur) pushList()
+  return out.slice(0, 40)
+}
+
+/* ---------- modal de configurações ---------- */
+
+function setSettingsTab (tab) {
+  document.querySelectorAll('.sm-tab').forEach(el => el.classList.toggle('on', el.dataset.set === tab))
+  $('setGeneral').classList.toggle('hidden', tab !== 'general')
+  $('setSync').classList.toggle('hidden', tab !== 'sync')
+  $('setHistory').classList.toggle('hidden', tab !== 'history')
+  $('setUpdates').classList.toggle('hidden', tab !== 'updates')
+  if (tab === 'sync') {
+    // sync automático + saúde do git são do modo local — no hosted os
+    // controles somem e fica só o aviso, em vez de um painel morto
+    const local = isLocal()
+    $('syncPrefsSec').classList.toggle('hidden', !local)
+    $('ghSec').classList.toggle('hidden', !local)
+    $('syncHostedNote').classList.toggle('hidden', local)
+    if (local) loadGitHealth()
+  }
+  if (tab === 'history' && !allHist.loaded) loadAllHistPage()
+  if (tab === 'updates') {
+    // valor persistido vem do settings.json via config — localStorage não
+    // sobrevive à troca de porta do Electron entre launches
+    if (window.gabbroDesktop && state.config && state.config.updateIntervalMs != null) {
+      const usel = $('updIntervalSel')
+      const v = String(state.config.updateIntervalMs)
+      if (UPD_INTERVALS.includes(v) && usel.value !== v) {
+        usel.value = v
+        usel.dispatchEvent(new Event('change'))
+      }
+    }
+    if (!changelogLoaded) loadChangelog()
+  }
+}
+
+function initSettingsUi () {
+  loadAutosave()
+  loadSyncPrefs()
+  // relógio do autosave parte do boot — nunca commita no primeiro drag da sessão
+  autosaveLastTry = Date.now()
+  autosyncLastTry = Date.now()
+  const btn = $('btnSettings'), modal = $('settingsModal')
+  const open = () => { modal.classList.remove('hidden'); btn.classList.add('on'); updateLastSyncLabel() }
+  const close = () => { modal.classList.add('hidden'); btn.classList.remove('on') }
+  btn.addEventListener('click', () => modal.classList.contains('hidden') ? open() : close())
+  $('settingsClose').addEventListener('click', close)
+  modal.addEventListener('mousedown', e => { if (e.target === modal) close() })
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !modal.classList.contains('hidden')) close() })
+  document.querySelectorAll('.sm-tab').forEach(el => el.addEventListener('click', () => setSettingsTab(el.dataset.set)))
+
+  // Geral — autosave de posições
+  const chk = $('autosaveOn'), secs = $('autosaveSecs')
+  chk.checked = autosave.on
+  secs.value = autosave.secs
+  secs.disabled = !autosave.on
+  chk.addEventListener('change', () => {
+    autosave.on = chk.checked
+    secs.disabled = !autosave.on
+    autosaveLastTry = Date.now() // o relógio zera ao ligar — nunca salva na hora
+    persistAutosave()
+    toast(autosave.on ? `salvamento automático ativado (a cada ${autosave.secs}s)` : 'salvamento automático desativado')
+  })
+  secs.addEventListener('change', () => {
+    const v = Math.max(5, Math.min(3600, Math.round(Number(secs.value) || 30)))
+    secs.value = v
+    autosave.secs = v
+    persistAutosave()
+  })
+  setInterval(() => {
+    if (!autosave.on || !canEdit() || !state.posDirty) return
+    if (posSaveInFlight || diagram.isDragging()) return
+    if (Date.now() - autosaveLastTry < autosave.secs * 1000) return
+    autosaveLastTry = Date.now()
+    savePositions()
+  }, 1000)
+
+  // Sincronização — intervalo + estratégia
+  const asel = $('autosyncSel'), ssel = $('strategySel')
+  asel.value = String(syncPrefs.intervalMs)
+  ssel.value = syncPrefs.strategy
+  const syncHints = () => {
+    $('autosyncHint').textContent = syncPrefs.intervalMs === 0
+      ? 'O Gabbro só sincroniza quando você clicar em Sincronizar.'
+      : 'O Gabbro sincroniza com o remoto nesse intervalo — nunca por cima de edição não salva.'
+    $('strategyHint').textContent = STRATEGY_HINTS[syncPrefs.strategy] || ''
+  }
+  syncHints()
+  asel.addEventListener('change', () => {
+    syncPrefs.intervalMs = Number(asel.value) || 0
+    autosyncLastTry = Date.now()
+    persistSyncPrefs()
+    syncHints()
+  })
+  ssel.addEventListener('change', () => {
+    if (['rebase', 'safe', 'ask'].includes(ssel.value)) syncPrefs.strategy = ssel.value
+    persistSyncPrefs()
+    syncHints()
+  })
+  $('ghRefresh').addEventListener('click', loadGitHealth)
+  setInterval(autosyncTick, 15000)
+
+  // Histórico completo
+  $('allHistMore').addEventListener('click', loadAllHistPage)
+
+  // Atualizações
+  const desktop = !!window.gabbroDesktop
+  $('updWebNote').classList.toggle('hidden', desktop)
+  $('updCheck').classList.toggle('hidden', !desktop)
+  $('updIntervalSec').classList.toggle('hidden', !desktop)
+  $('clReload').addEventListener('click', loadChangelog)
+  if (desktop) {
+    const usel = $('updIntervalSel')
+    usel.value = loadUpdInterval()
+    const updHint = () => {
+      $('updIntervalHint').textContent = usel.value === '0'
+        ? 'Desligado — o Gabbro só procura atualização quando você clicar em "Verificar agora".'
+        : 'O Gabbro procura uma versão nova nesse intervalo e avisa quando estiver pronta.'
+    }
+    updHint()
+    // sem push no boot: o main process já leu o valor persistido do
+    // settings.json — empurrar o default daqui religaria o auto-update
+    usel.addEventListener('change', () => {
+      if (!UPD_INTERVALS.includes(usel.value)) return
+      try { localStorage.setItem(UPD_INTERVAL_KEY, usel.value) } catch (e) { /* storage cheio */ }
+      try { window.gabbroDesktop.setUpdateInterval(Number(usel.value)) } catch (e) { /* preload antigo */ }
+      updHint()
+    })
+    $('updCheck').addEventListener('click', () => {
+      try { window.gabbroDesktop.checkUpdates() } catch (e) { /* preload antigo */ }
+    })
+    $('updInstall').addEventListener('click', () => window.gabbroDesktop.installUpdate())
+    window.gabbroDesktop.onUpdateStatus(applyUpdStatus)
+  }
 }
 
 function applySyncState (s) {
@@ -317,14 +724,14 @@ function applySyncState (s) {
   el.classList.toggle('hidden', !parts.length && !s.pushWarning)
   el.classList.toggle('warn', !!s.pushWarning)
   el.title = s.pushWarning
-    ? `push pending (${s.pushWarning.reason}): ${s.pushWarning.detail || ''} — ${s.pushWarning.fix || ''}`
-    : (s.hasUpstream ? `ahead ${s.ahead} · behind ${s.behind} vs ${s.upstream}` : 'no upstream configured')
+    ? `push pendente (${s.pushWarning.reason}): ${s.pushWarning.detail || ''} — ${s.pushWarning.fix || ''}`
+    : (s.hasUpstream ? `${s.ahead} à frente · ${s.behind} atrás de ${s.upstream}` : 'sem upstream configurado')
   // uncommitted external changes on the tracked files (edited outside gabbro)
   const dirty = Array.isArray(s.dirty) && s.dirty.length
   const db = $('dirtyBanner')
   if (db) {
     db.classList.toggle('hidden', !dirty)
-    if (dirty) db.textContent = `uncommitted changes in the worktree: ${s.dirty.map(d => d.file || d).join(', ')} — saving from Gabbro will include them in the commit`
+    if (dirty) db.textContent = `mudanças não commitadas no worktree: ${s.dirty.map(d => d.file || d).join(', ')} — salvar pelo Gabbro vai incluí-las no commit`
   }
 }
 
@@ -335,31 +742,56 @@ async function refreshSyncBadge () {
   } catch (e) { /* badge is best-effort */ }
 }
 
-async function doSync () {
+let lastSyncAt = null
+let syncInFlight = false
+
+// Estratégia efetiva enviada ao servidor. 'ask' vai de 'safe' e, se divergir,
+// pergunta (só em sync manual — o automático nunca abre prompt).
+async function runSync (auto) {
+  const pref = syncPrefs.strategy
+  const first = pref === 'rebase' ? 'rebase' : 'safe'
+  let r = await api.sync(first)
+  if (!r.ok && r.reason === 'diverged' && pref === 'ask' && !auto) {
+    const go = window.confirm('O remoto divergiu das suas mudanças.\n\nRebasear suas mudanças por cima do remoto? (Cancelar deixa tudo como está.)')
+    if (go) r = await api.sync('rebase')
+  }
+  return r
+}
+
+async function doSync (opts) {
+  opts = opts || {}
+  if (syncInFlight) return
+  syncInFlight = true
   const btn = $('btnSync')
   btn.disabled = true
   btn.classList.add('busy')
   try {
-    const r = await api.sync()
+    const r = await runSync(!!opts.auto)
     applySyncState(r.syncState)
     if (!r.ok) {
-      toast(`sync failed at ${r.step} (${r.reason}): ${r.fix || r.detail || ''}`, 'error')
+      const msg = `sincronização falhou no ${r.step === 'pull' ? 'pull' : 'push'} (${r.reason}): ${r.fix || r.detail || ''}`
+      toast(msg, opts.auto && r.reason === 'diverged' ? 'warn' : 'error')
       return
     }
-    // pull may have rewritten the tracked files — reload everything visible
-    state.models.clear()
-    state.baselines.clear()
+    // pull may have rewritten the tracked files — reload everything visible,
+    // MAS edição de DBML não salva (em qualquer branch) sobrevive ao reload
+    const kept = await reloadModelsKeepDirty()
     state.branches = await api.getBranches()
     fillBranchSelects()
     if (!state.posDirty) {
       const p = await api.getPositions()
       if (p && p.tables) state.positions = { version: p.version || 1, tables: p.tables }
     }
-    if (!state.hist) await renderAll({ fitView: false })
+    // branch atual suja: não sobrescrever o editor com o texto do disco
+    if (!state.hist) await renderAll({ fitView: false, syncEditor: !kept.has(state.branch) })
     if (state.tab === 'history') hist.reload().catch(() => {})
     else hist.invalidate()
-    toast('synced with remote')
-  } catch (e) { fail(e) } finally {
+    lastSyncAt = Date.now()
+    updateLastSyncLabel()
+    if (kept.size) toast('sincronizado — sua edição de DBML não salva foi preservada no editor', 'warn')
+    else if (!opts.quiet) toast('sincronizado com o remoto')
+  } catch (e) { if (!opts.quiet) fail(e) } finally {
+    syncInFlight = false
     btn.disabled = false
     btn.classList.remove('busy')
   }
@@ -420,7 +852,7 @@ function initDesktopUpdates () {
     if (s.state === 'downloaded') {
       const b = $('updateBanner')
       b.classList.remove('hidden')
-      $('updateBannerText').textContent = `Update ${s.version || ''} ready`
+      $('updateBannerText').textContent = `Atualização ${s.version || ''} pronta`
     }
   })
   $('updateRestart').addEventListener('click', () => window.gabbroDesktop.installUpdate())
@@ -429,7 +861,7 @@ function initDesktopUpdates () {
 function setupLocalChrome () {
   $('btnSync').classList.remove('hidden')
   $('btnSync').addEventListener('click', doSync)
-  $('btnRefresh').title = 'Fetch latest from remote (read-only) — use Sync to integrate'
+  $('btnRefresh').title = 'Buscar o mais recente do remoto (só leitura) — use Sincronizar para integrar'
   initRepoSwitcher()
   initDesktopUpdates()
   refreshSyncBadge()
@@ -493,6 +925,7 @@ function handleHash () {
 async function boot () {
   diagram.initDiagram({ parse: parseDBML })
   initDocs()
+  initSettingsUi()
   hist.initHistory({ onOpenCommit: openHistoryCommit, onExit: exitHistory, fail })
   $('histExit').addEventListener('click', exitHistory)
 
@@ -520,7 +953,7 @@ async function boot () {
   $('diffTarget').addEventListener('change', () => state.diffOn && renderAll({ fitView: true }).catch(fail))
   $('modeView').addEventListener('click', () => { state.mode = 'view'; updateChrome() })
   $('modeEdit').addEventListener('click', () => {
-    if (state.diffOn || state.hist || state.config.readOnly) return
+    if (state.diffOn || state.hist || !state.config || state.config.readOnly) return
     state.mode = 'edit'
     const entry = state.models.get(state.branch)
     if (entry) diagram.setEditorText(entry.text)
@@ -561,7 +994,7 @@ async function boot () {
     $('repoName').textContent = state.config.repoName
     if (isLocal()) setupLocalChrome()
     state.branches = await api.getBranches()
-    if (!state.branches.length) { toast('repository has no branches yet', 'error'); return }
+    if (!state.branches.length) { toast('o repositório ainda não tem branches', 'error'); return }
 
     // local: land on the checked-out branch (the only editable one);
     // hosted: v1 behavior (master, else edit branch, else first)

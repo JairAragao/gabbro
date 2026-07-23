@@ -1,15 +1,15 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="pt-BR">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Gabbro</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><g stroke='%230f1315' stroke-width='.7' stroke-opacity='.4' stroke-linejoin='round'><polygon points='50,4 89,26.5 50,50' fill='%23272e32'/><polygon points='89,26.5 89,71.5 50,50' fill='%231d2225'/><polygon points='89,71.5 50,96 50,50' fill='%2323292e'/><polygon points='50,96 11,71.5 50,50' fill='%23181d20'/><polygon points='11,71.5 11,26.5 50,50' fill='%23212729'/><polygon points='11,26.5 50,4 50,50' fill='%232b3236'/></g><path d='M 69,33 L 52,23 L 32,35 L 32,64 L 52,76 L 69,66 L 69,51 L 52,51' fill='none' stroke='%238fb3a0' stroke-width='8' stroke-linejoin='bevel' stroke-linecap='square'/><path d='M 69,33 L 52,23 L 32,35' fill='none' stroke='%23d7e2d4' stroke-width='2.6' stroke-linejoin='bevel' stroke-linecap='square'/></svg>">
-<meta name="theme-color" content="#232a36">
+<meta name="theme-color" content="#1a1f21">
 <link rel="stylesheet" href="css/app.css">
 </head>
 <body class="mode-view">
-  <!-- Gabbro mark (D0 — "G no cristal") shared by toolbar and welcome screen -->
+  <!-- Marca do Gabbro (D0 — "G no cristal") compartilhada por toolbar e tela de boas-vindas -->
   <svg width="0" height="0" style="position:absolute" aria-hidden="true">
     <defs>
       <symbol id="logoMark" viewBox="0 0 100 100">
@@ -33,71 +33,192 @@
   <div id="toolbar">
     <svg class="logo-mark" aria-hidden="true"><use href="#logoMark"/></svg>
     <span class="logo">Gabbro</span>
-    <button class="repo-btn" id="repoBtn" title="Repository">
+    <button class="repo-btn" id="repoBtn" title="Repositório">
       <span class="meta" id="repoName"></span><span id="repoCaret" class="hidden">&#9662;</span>
     </button>
     <nav id="tabs">
-      <button class="tab on" data-tab="diagram">Diagram</button>
+      <button class="tab on" data-tab="diagram">Diagrama</button>
       <button class="tab" data-tab="docs">Docs</button>
-      <button class="tab" data-tab="history">History</button>
+      <button class="tab" data-tab="history">Hist&oacute;rico</button>
     </nav>
     <select id="branchSel" title="Branch"></select>
     <span id="syncBadge" class="hidden" title=""></span>
-    <button class="btn hidden" id="btnSync" title="Pull remote changes (rebase) and push local commits">
-      <span class="sync-ico">&#10227;</span>Sync</button>
-    <button class="btn" id="btnRefresh" title="Fetch latest from remote">&#10227;</button>
-    <button class="btn" id="btnDiff" title="Compare two branches">Diff</button>
+    <button class="btn hidden" id="btnSync" title="Puxa mudan&ccedil;as do remoto (rebase) e envia os commits locais">
+      <span class="sync-ico">&#10227;</span>Sincronizar</button>
+    <button class="btn" id="btnRefresh" title="Buscar o mais recente do remoto">&#10227;</button>
+    <button class="btn" id="btnDiff" title="Comparar duas branches">Diff</button>
     <span id="diffCtrls" class="hidden">
-      <select id="diffBase" title="Base branch"></select>
+      <select id="diffBase" title="Branch base"></select>
       <span class="diff-arrow">&rarr;</span>
-      <select id="diffTarget" title="Target branch"></select>
+      <select id="diffTarget" title="Branch alvo"></select>
     </span>
     <span class="meta" id="meta"></span>
     <span class="spacer"></span>
     <div id="searchWrap">
-      <select id="searchScope" title="Search scope">
-        <option value="all" selected>All</option>
-        <option value="tables">Tables</option>
-        <option value="columns">Columns</option>
+      <select id="searchScope" title="Escopo da busca">
+        <option value="all" selected>Tudo</option>
+        <option value="tables">Tabelas</option>
+        <option value="columns">Colunas</option>
       </select>
-      <input id="search" placeholder="Search&hellip;" autocomplete="off" title="Enter = next match, Shift+Enter = previous">
+      <input id="search" placeholder="Buscar&hellip;" autocomplete="off" title="Enter = pr&oacute;ximo, Shift+Enter = anterior">
       <span id="searchCount" class="hidden"></span>
-      <button id="searchPrev" class="search-nav hidden" title="Previous match (Shift+Enter)">‹</button>
-      <button id="searchNext" class="search-nav hidden" title="Next match (Enter)">›</button>
+      <button id="searchPrev" class="search-nav hidden" title="Anterior (Shift+Enter)">‹</button>
+      <button id="searchNext" class="search-nav hidden" title="Pr&oacute;ximo (Enter)">›</button>
     </div>
     <div id="modeToggle">
-      <button id="modeView" class="on">View</button>
-      <button id="modeEdit">Edit</button>
+      <button id="modeView" class="on">Visualizar</button>
+      <button id="modeEdit">Editar</button>
     </div>
-    <button class="btn primary" id="btnSaveDbml" hidden>Save DBML</button>
-    <button class="btn primary" id="btnSavePos" hidden>Save positions</button>
+    <button class="btn" id="btnSettings" title="Configura&ccedil;&otilde;es">
+      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </button>
+    <button class="btn primary" id="btnSaveDbml" hidden>Salvar DBML</button>
+    <button class="btn primary" id="btnSavePos" hidden>Salvar posi&ccedil;&otilde;es</button>
+  </div>
+
+  <div id="settingsModal" class="hidden">
+    <div class="sm-card">
+      <div class="sm-head">
+        <span class="sm-title">Configura&ccedil;&otilde;es</span>
+        <span class="spacer"></span>
+        <button class="btn sm" id="settingsClose">&#10005;</button>
+      </div>
+      <div class="sm-body">
+        <nav class="sm-tabs">
+          <button class="sm-tab on" data-set="general">Geral</button>
+          <button class="sm-tab" data-set="sync">Sincroniza&ccedil;&atilde;o</button>
+          <button class="sm-tab" data-set="history">Hist&oacute;rico</button>
+          <button class="sm-tab" data-set="updates">Atualiza&ccedil;&otilde;es</button>
+        </nav>
+        <div class="sm-panels">
+
+          <section id="setGeneral" class="sm-panel">
+            <div class="sm-section">
+              <div class="sm-sec-title">Salvamento autom&aacute;tico de posi&ccedil;&otilde;es</div>
+              <label class="set-row"><input type="checkbox" id="autosaveOn"> Habilitar</label>
+              <div class="set-row set-interval">
+                <span>A cada</span>
+                <input type="number" id="autosaveSecs" min="5" max="3600" step="5" value="30">
+                <span>segundos</span>
+              </div>
+              <p class="set-hint">Com o salvamento autom&aacute;tico ativo, mover tabelas no modo edi&ccedil;&atilde;o
+              commita as posi&ccedil;&otilde;es sozinho no intervalo definido. Desativado, s&oacute; o bot&atilde;o
+              &ldquo;Salvar posi&ccedil;&otilde;es&rdquo; salva.</p>
+            </div>
+          </section>
+
+          <section id="setSync" class="sm-panel hidden">
+            <p class="sm-desc hidden" id="syncHostedNote">A sincroniza&ccedil;&atilde;o autom&aacute;tica e a
+            sa&uacute;de do git s&atilde;o do modo local (rodando no seu clone). Nesta inst&acirc;ncia hospedada,
+            o pr&oacute;prio servidor cuida do git a cada salvamento.</p>
+            <div class="sm-section" id="syncPrefsSec">
+              <div class="sm-sec-title">Sincroniza&ccedil;&atilde;o autom&aacute;tica</div>
+              <div class="set-row"><span class="set-lbl">Intervalo</span>
+                <select id="autosyncSel">
+                  <option value="0">Desligado</option>
+                  <option value="60000">1 minuto</option>
+                  <option value="300000">5 minutos</option>
+                  <option value="900000">15 minutos</option>
+                </select>
+              </div>
+              <p class="set-hint" id="autosyncHint"></p>
+              <div class="set-row"><span class="set-lbl">Quando houver conflito</span>
+                <select id="strategySel">
+                  <option value="rebase">Remoto vence (rebase) + avisar</option>
+                  <option value="safe">S&oacute; fast-forward (seguro)</option>
+                  <option value="ask">Perguntar</option>
+                </select>
+              </div>
+              <p class="set-hint" id="strategyHint"></p>
+              <div class="set-row sm-topline"><span class="set-lbl">&Uacute;ltimo sync</span><span id="lastSyncLbl">&mdash;</span></div>
+            </div>
+            <div class="sm-section" id="ghSec">
+              <div class="sm-sec-title-row">
+                <span class="sm-sec-title">Sa&uacute;de do git</span>
+                <span id="ghPill" class="gh-pill hidden"></span>
+                <span class="spacer"></span>
+                <button class="btn sm" id="ghRefresh" title="Atualizar">&#10227;</button>
+              </div>
+              <div class="gh-meta" id="ghMeta"></div>
+              <ul id="ghChecks" class="gh-checks"></ul>
+            </div>
+          </section>
+
+          <section id="setHistory" class="sm-panel hidden">
+            <p class="sm-desc">Todos os commits do reposit&oacute;rio (qualquer arquivo), do mais recente
+            ao mais antigo. A aba Hist&oacute;rico principal mostra s&oacute; os commits do schema, com diff estrutural.</p>
+            <ul id="allHistList" class="ah-list"></ul>
+            <div id="allHistEmpty" class="sm-empty hidden">sem commits ainda</div>
+            <button class="btn hidden" id="allHistMore">Carregar mais</button>
+          </section>
+
+          <section id="setUpdates" class="sm-panel hidden">
+            <div class="sm-section">
+              <div class="sm-sec-title-row">
+                <span class="sm-sec-title">Vers&atilde;o instalada</span>
+                <span id="updVersion" class="upd-version">&mdash;</span>
+                <span class="spacer"></span>
+                <button class="btn sm hidden" id="updCheck">Verificar agora</button>
+                <button class="btn sm primary hidden" id="updInstall">Reiniciar para aplicar</button>
+              </div>
+              <div class="upd-status hidden" id="updStatusRow"><span class="upd-dot" id="updDot"></span><span id="updStatus"></span></div>
+              <p class="set-hint hidden" id="updWebNote">A atualiza&ccedil;&atilde;o autom&aacute;tica s&oacute; funciona no
+              app desktop. No navegador, atualize o clone do Gabbro com <code>git pull</code>.</p>
+            </div>
+            <div class="sm-section hidden" id="updIntervalSec">
+              <div class="sm-sec-title">Verifica&ccedil;&atilde;o autom&aacute;tica</div>
+              <div class="set-row"><span class="set-lbl">A cada</span>
+                <select id="updIntervalSel">
+                  <option value="0">Desligado</option>
+                  <option value="1800000">30 minutos</option>
+                  <option value="3600000">1 hora</option>
+                  <option value="10800000">3 horas</option>
+                  <option value="21600000">6 horas</option>
+                  <option value="86400000">24 horas</option>
+                </select>
+              </div>
+              <p class="set-hint" id="updIntervalHint"></p>
+            </div>
+            <div class="sm-section">
+              <div class="sm-sec-title-row">
+                <span class="sm-sec-title">Novidades das vers&otilde;es</span>
+                <span class="spacer"></span>
+                <button class="btn sm" id="clReload" title="Recarregar">&#10227;</button>
+              </div>
+              <div id="changelogList" class="cl-list"></div>
+            </div>
+          </section>
+
+        </div>
+      </div>
+    </div>
   </div>
 
   <div id="repoMenu" class="hidden">
-    <div class="rm-title">Recent repositories</div>
+    <div class="rm-title">Reposit&oacute;rios recentes</div>
     <div id="repoRecents"></div>
-    <div id="repoNoRecents" class="rm-empty hidden">no other recent repos</div>
+    <div id="repoNoRecents" class="rm-empty hidden">nenhum outro reposit&oacute;rio recente</div>
     <div class="rm-open">
-      <input id="repoPath" placeholder="Path to a git clone&hellip;" autocomplete="off" spellcheck="false">
-      <button class="btn sm hidden" id="repoBrowse">Browse&hellip;</button>
-      <button class="btn sm" id="repoOpen">Open</button>
+      <input id="repoPath" placeholder="Caminho de um clone git&hellip;" autocomplete="off" spellcheck="false">
+      <button class="btn sm hidden" id="repoBrowse">Procurar&hellip;</button>
+      <button class="btn sm" id="repoOpen">Abrir</button>
     </div>
   </div>
 
   <div id="banners">
     <div id="histBanner" class="bnr hist hidden">
       <span id="histBannerText"></span>
-      <button id="histExit" class="bnr-btn">Exit</button>
+      <button id="histExit" class="bnr-btn">Sair</button>
     </div>
     <div id="updateBanner" class="bnr hist hidden">
       <span id="updateBannerText"></span>
-      <button id="updateRestart" class="bnr-btn">Restart to update</button>
+      <button id="updateRestart" class="bnr-btn">Reiniciar para atualizar</button>
     </div>
     <div id="dirtyBanner" class="bnr warn hidden"></div>
     <div id="identityBanner" class="bnr hidden">
-      Configure git identity to edit &mdash;
-      <code>git config --global user.name "Your Name"</code> ·
-      <code>git config --global user.email you@example.com</code>
+      Configure a identidade git para editar &mdash;
+      <code>git config --global user.name "Seu Nome"</code> ·
+      <code>git config --global user.email voce@exemplo.com</code>
     </div>
     <div id="banner" class="bnr hidden"></div>
   </div>
@@ -105,13 +226,13 @@
   <div id="main">
     <section id="diagramSection">
       <div id="editorPane" class="hidden">
-        <div id="edHead"><span class="dot" id="edDot"></span><span id="edStatus">ready</span>
-          <span class="spacer"></span><span class="edhint">editing re-renders live</span></div>
+        <div id="edHead"><span class="dot" id="edDot"></span><span id="edStatus">pronto</span>
+          <span class="spacer"></span><span class="edhint">a edi&ccedil;&atilde;o re-renderiza ao vivo</span></div>
         <div id="edWrap">
           <div id="gutter">1</div>
           <div id="codeBox">
             <pre id="hl" aria-hidden="true"><code></code></pre>
-            <textarea id="code" spellcheck="false" placeholder="DBML source&hellip;"></textarea>
+            <textarea id="code" spellcheck="false" placeholder="C&oacute;digo DBML&hellip;"></textarea>
           </div>
         </div>
       </div>
@@ -120,18 +241,29 @@
       <div id="viewport">
         <div id="world"><svg id="svg"></svg></div>
         <div id="zoombar">
-          <button class="btn sm" id="btnFit" title="Fit diagram to view">Fit</button>
-          <button class="btn sm" id="btnOrtho" title="Route edges around tables">Route</button>
-          <button class="btn sm" id="btnHl" title="Highlight relationships on hover (heavy on large diagrams)">Hover</button>
+          <button class="btn sm" id="btnFit" title="Ajustar o diagrama &agrave; tela">Ajustar</button>
+          <button class="btn sm" id="btnArrange" title="Reorganizar as tabelas automaticamente">Organizar</button>
+          <button class="btn sm" id="btnOrtho" title="Contornar as tabelas com as linhas">Rotas</button>
+          <button class="btn sm" id="btnHl" title="Destacar relacionamentos ao passar o mouse (pesado em diagramas grandes)">Hover</button>
+          <button class="btn sm" id="btnGrid" title="Mostrar/ocultar o quadriculado de fundo">Grade</button>
           <div class="z" id="zout"></div><div class="lvl" id="zlvl">100%</div><div class="z" id="zin"></div>
         </div>
-        <div class="hint">wheel=zoom &middot; background=pan &middot; header=move table &middot; group label=move group &middot; double-click=open in editor</div>
+        <div id="arrangeMenu" class="hidden">
+          <div class="pal-title">Organizar tabelas</div>
+          <button class="arr-opt" data-a="leftright"><b>Esquerda &rarr; direita</b>
+            <span>Camadas pela dire&ccedil;&atilde;o dos relacionamentos. Ideal pra linhagem longa (estilo ETL).</span></button>
+          <button class="arr-opt" data-a="snowflake"><b>Floco de neve</b>
+            <span>Tabelas mais conectadas no centro, vizinhas em an&eacute;is. Ideal pra diagramas densos.</span></button>
+          <button class="arr-opt" data-a="compact"><b>Compacto</b>
+            <span>Grade compacta por grupos. Ideal pra poucos relacionamentos.</span></button>
+        </div>
+        <div class="hint">ctrl+scroll=zoom &middot; scroll=rolar &middot; bot&atilde;o do meio ou fundo=arrastar &middot; cabe&ccedil;alho=mover tabela &middot; r&oacute;tulo do grupo=mover grupo &middot; duplo clique=abrir no editor</div>
       </div>
     </section>
 
     <section id="docsSection" class="hidden">
       <aside id="docsSidebar">
-        <input id="docsSearch" placeholder="Filter tables&hellip;" autocomplete="off">
+        <input id="docsSearch" placeholder="Filtrar tabelas&hellip;" autocomplete="off">
         <nav id="docsIndex"></nav>
       </aside>
       <div id="docsContent"></div>
@@ -144,45 +276,45 @@
             <span class="hist-pill mono" id="histDetailHash"></span>
             <span class="hd-msg" id="histDetailMsg"></span>
             <span class="spacer"></span>
-            <button class="btn sm" id="histDiffToggle">Show text diff</button>
-            <button class="btn sm" id="histDetailClose">Exit</button>
+            <button class="btn sm" id="histDiffToggle">Mostrar diff textual</button>
+            <button class="btn sm" id="histDetailClose">Sair</button>
           </div>
           <div class="hd-meta" id="histDetailMeta"></div>
           <pre id="histDiffPre" class="hidden"></pre>
         </div>
         <ul id="histList"></ul>
-        <div id="histEmpty" class="hidden">no commits touching the tracked files yet</div>
-        <button class="btn hidden" id="histMore">Load more</button>
+        <div id="histEmpty" class="hidden">nenhum commit tocando os arquivos rastreados ainda</div>
+        <button class="btn hidden" id="histMore">Carregar mais</button>
       </div>
     </section>
   </div>
 
-  <!-- Welcome screen — shown on an unconfigured boot instead of a native
-       folder dialog. The chosen repo is persisted (~/.gabbro/settings.json). -->
+  <!-- Tela de boas-vindas — exibida num boot sem repositório configurado, no lugar
+       de um diálogo nativo de pasta. O repo escolhido persiste (~/.gabbro/settings.json). -->
   <div id="welcome" class="hidden">
     <div class="wl-card">
       <svg class="wl-logo" aria-hidden="true"><use href="#logoMark"/></svg>
       <h1 class="wl-title">Gabbro</h1>
-      <p class="wl-sub">Git-native DBML studio &mdash; diagram, docs, diff and history for your database schema.</p>
+      <p class="wl-sub">Est&uacute;dio DBML git-native &mdash; diagrama, documenta&ccedil;&atilde;o, diff e hist&oacute;rico do schema do seu banco.</p>
       <div class="wl-open">
-        <div class="wl-section">Open a repository</div>
+        <div class="wl-section">Abrir um reposit&oacute;rio</div>
         <div id="wlRecents"></div>
-        <div id="wlNoRecents" class="wl-empty hidden">no recent repositories</div>
+        <div id="wlNoRecents" class="wl-empty hidden">nenhum reposit&oacute;rio recente</div>
         <div class="wl-row">
-          <input id="wlPath" placeholder="Path to a git clone&hellip;" autocomplete="off" spellcheck="false">
-          <button class="btn hidden" id="wlBrowse">Browse&hellip;</button>
-          <button class="btn primary" id="wlOpen">Open</button>
+          <input id="wlPath" placeholder="Caminho de um clone git&hellip;" autocomplete="off" spellcheck="false">
+          <button class="btn hidden" id="wlBrowse">Procurar&hellip;</button>
+          <button class="btn primary" id="wlOpen">Abrir</button>
         </div>
-        <p class="wl-hint">Pick the clone that holds your <code>.dbml</code> file (detected automatically at the repo root). Gabbro remembers it &mdash; next launch opens straight into the diagram.</p>
+        <p class="wl-hint">Escolha o clone que cont&eacute;m o seu arquivo <code>.dbml</code> (detectado automaticamente na raiz do repo). O Gabbro lembra dele &mdash; o pr&oacute;ximo boot j&aacute; abre direto no diagrama.</p>
       </div>
     </div>
   </div>
 
   <div id="tip"></div>
   <div id="palette">
-    <div class="pal-title">Header color</div>
+    <div class="pal-title">Cor do cabe&ccedil;alho</div>
     <div class="pal-grid" id="palGrid"></div>
-    <div class="pal-custom"><input type="color" id="palCustom"><span>custom</span></div>
+    <div class="pal-custom"><input type="color" id="palCustom"><span>personalizada</span></div>
   </div>
   <div id="toast"></div>
 

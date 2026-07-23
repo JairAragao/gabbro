@@ -3,7 +3,7 @@ async function request (path, opts, attempt = 0) {
   try {
     res = await fetch(path, opts)
   } catch (e) {
-    throw new Error('server unreachable')
+    throw new Error('servidor inacessível')
   }
   // 503 while the server is still cloning the repo on boot — wait and retry.
   if (res.status === 503 && attempt < 5) {
@@ -41,8 +41,12 @@ export const putPositions = (obj, branch) =>
   json('/api/positions', put(branch ? { ...obj, branch } : obj))
 export const refresh = () => json('/api/refresh', { method: 'POST' })
 
-export const sync = () => json('/api/sync', { method: 'POST' })
+export const sync = strategy => json('/api/sync', strategy ? send('POST', { strategy }) : { method: 'POST' })
 export const getSyncState = () => json('/api/sync-state')
+export const getGitHealth = () => json('/api/git-health')
+export const getHistoryAll = (skip, limit) =>
+  json(`/api/history-all?skip=${skip | 0}&limit=${limit | 0}`)
+export const getChangelog = () => json('/api/changelog')
 export const getRepo = () => json('/api/repo')
 export const putRepo = path => json('/api/repo', put({ path }))
 
