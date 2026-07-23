@@ -286,6 +286,14 @@ app.get('/api/history', wrap(async (req, res) => {
   }))
 }))
 
+// Diff textual do DBML entre duas branches — painel de texto do modo diff.
+app.get('/api/diff-text', wrap(async (req, res) => {
+  await repo.fetchIfStale(false)
+  const out = await repo.diffBranchesText(
+    String(req.query.base || ''), String(req.query.target || ''), cfg.dbmlFile)
+  res.type('text/plain').send(out)
+}))
+
 // Todos os commits do repositório (qualquer arquivo) — aba Histórico das
 // Configurações. Metadados de commit apenas, nunca conteúdo de arquivo.
 app.get('/api/history-all', wrap(async (req, res) => {

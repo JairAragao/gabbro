@@ -338,6 +338,26 @@ async function emptyTreeHash () {
   return _emptyTree
 }
 
+// Diff textual do arquivo entre duas branches (modo diff do app). Só metadados
+// de branch validados — nunca vira oráculo de conteúdo arbitrário.
+async function diffBranchesText (base, target, file) {
+  for (const b of [base, target]) {
+    if (!BRANCH_RE.test(b)) {
+      const e = new Error('nome de branch inválido')
+      e.status = 400
+      throw e
+    }
+  }
+  const branches = await listBranches()
+  if (!branches.includes(base) || !branches.includes(target)) {
+    const e = new Error('branch não encontrada')
+    e.status = 404
+    throw e
+  }
+  const ref = b => cfg.mode === 'local' ? `refs/heads/${b}` : `origin/${b}`
+  return git(['diff', `${ref(base)}..${ref(target)}`, '--', file])
+}
+
 async function diffFile (hash, file) {
   let base = await resolveRev(`${hash}^`)
   if (!base) base = await emptyTreeHash()
@@ -368,5 +388,6 @@ module.exports = {
   resolveCommit,
   emptyTreeHash,
   diffFile,
+  diffBranchesText,
   commitMeta
 }

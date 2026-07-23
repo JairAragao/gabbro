@@ -47,6 +47,8 @@ export const getGitHealth = () => json('/api/git-health')
 export const getHistoryAll = (skip, limit) =>
   json(`/api/history-all?skip=${skip | 0}&limit=${limit | 0}`)
 export const getChangelog = () => json('/api/changelog')
+export const getDiffText = (base, target) =>
+  text(`/api/diff-text?base=${encodeURIComponent(base)}&target=${encodeURIComponent(target)}`)
 export const getRepo = () => json('/api/repo')
 export const putRepo = path => json('/api/repo', put({ path }))
 

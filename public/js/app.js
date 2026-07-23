@@ -156,6 +156,8 @@ async function renderAll (opts) {
     const union = buildUnionModel(b.model, t.model, d)
     diagram.loadModel(union, state.positions, d, { fitView: opts.fitView !== false, dirty: state.posDirty })
     renderDocs(union, d)
+    updateDiffNav(d)
+    diagram.setDiffDim(diffDim)
   } else {
     const entry = await ensureModel(state.branch)
     diagram.loadModel(entry.model, state.positions, null, { fitView: opts.fitView !== false, dirty: state.posDirty })
@@ -237,6 +239,7 @@ function setDiffUi (on) {
   state.diffOn = on
   $('btnDiff').classList.toggle('on', on)
   $('diffCtrls').classList.toggle('hidden', !on)
+  if (!on) hideDiffTools()
 }
 async function toggleDiff (on) {
   if (on && state.hist) { state.hist = null; hist.setActive(null) } // mutually exclusive
@@ -244,6 +247,59 @@ async function toggleDiff (on) {
   try {
     await renderAll({ fitView: true })
   } catch (e) { fail(e) }
+}
+
+/* ---------- modo diff: navegador de mudanças + diff textual ---------- */
+
+let diffDim = true
+let diffPaneOpen = false
+
+function hideDiffTools () {
+  $('diffNav').classList.add('hidden')
+  $('diffPane').classList.add('hidden')
+  $('btnDiffText').classList.remove('on')
+  diffPaneOpen = false
+  diagram.setDiffDim(false)
+}
+
+function updateDiffNav (d) {
+  const nav = $('diffNav')
+  const groups = { added: [], modified: [], removed: [] }
+  for (const [nm, td] of Object.entries(d.tables)) if (td.status !== 'same') groups[td.status].push(nm)
+  Object.values(groups).forEach(a => a.sort())
+  const total = groups.added.length + groups.modified.length + groups.removed.length
+  nav.classList.remove('hidden')
+  if (!total) {
+    nav.innerHTML = '<div class="dn-head">Mudanças</div><div class="dn-empty">sem diferenças estruturais</div>'
+    return
+  }
+  const block = (status, label, names) => names.length
+    ? `<div class="dn-sec"><span class="diff-tag ${status}">${label} ${names.length}</span></div>` +
+      names.map(nm => `<button class="dn-item" data-t="${escHtml(nm)}">${escHtml(nm)}</button>`).join('')
+    : ''
+  nav.innerHTML = `<div class="dn-head">Mudanças <span class="doc-count">${total}</span></div><div class="dn-list">` +
+    block('added', 'NOVAS', groups.added) +
+    block('modified', 'ALTERADAS', groups.modified) +
+    block('removed', 'REMOVIDAS', groups.removed) + '</div>'
+  nav.querySelectorAll('.dn-item').forEach(b =>
+    b.addEventListener('click', () => diagram.centerOnTable(b.dataset.t)))
+}
+
+function renderDiffTextHtml (txt) {
+  return txt.split('\n').map(l => {
+    const cls = /^(\+\+\+|---)/.test(l) ? 'dh' : l[0] === '+' ? 'da' : l[0] === '-' ? 'dr' : l.startsWith('@@') ? 'dm' : ''
+    return `<span class="dl${cls ? ' ' + cls : ''}">${escHtml(l) || ' '}</span>`
+  }).join('\n')
+}
+
+async function loadDiffText () {
+  const pre = $('dpPre')
+  pre.textContent = 'Carregando…'
+  try {
+    const txt = await api.getDiffText($('diffBase').value, $('diffTarget').value)
+    if (txt.trim()) pre.innerHTML = renderDiffTextHtml(txt)
+    else pre.textContent = '(sem diferenças no texto entre as branches)'
+  } catch (e) { pre.textContent = e.message || 'falha ao carregar o diff' }
 }
 
 // Recarrega o cache de modelos preservando edição de DBML não salva (em
@@ -949,8 +1005,29 @@ async function boot () {
   $('branchSel').addEventListener('change', e => switchBranch(e.target.value).catch(fail))
   $('btnRefresh').addEventListener('click', doRefresh)
   $('btnDiff').addEventListener('click', () => toggleDiff(!state.diffOn))
-  $('diffBase').addEventListener('change', () => state.diffOn && renderAll({ fitView: true }).catch(fail))
-  $('diffTarget').addEventListener('change', () => state.diffOn && renderAll({ fitView: true }).catch(fail))
+  const onDiffSel = () => {
+    if (!state.diffOn) return
+    renderAll({ fitView: true }).catch(fail)
+    if (diffPaneOpen) loadDiffText()
+  }
+  $('diffBase').addEventListener('change', onDiffSel)
+  $('diffTarget').addEventListener('change', onDiffSel)
+  $('btnDiffDim').addEventListener('click', () => {
+    diffDim = !diffDim
+    $('btnDiffDim').classList.toggle('on', diffDim)
+    diagram.setDiffDim(state.diffOn && diffDim)
+  })
+  $('btnDiffText').addEventListener('click', () => {
+    diffPaneOpen = !diffPaneOpen
+    $('diffPane').classList.toggle('hidden', !diffPaneOpen)
+    $('btnDiffText').classList.toggle('on', diffPaneOpen)
+    if (diffPaneOpen) loadDiffText()
+  })
+  $('dpClose').addEventListener('click', () => {
+    diffPaneOpen = false
+    $('diffPane').classList.add('hidden')
+    $('btnDiffText').classList.remove('on')
+  })
   $('modeView').addEventListener('click', () => { state.mode = 'view'; updateChrome() })
   $('modeEdit').addEventListener('click', () => {
     if (state.diffOn || state.hist || !state.config || state.config.readOnly) return
