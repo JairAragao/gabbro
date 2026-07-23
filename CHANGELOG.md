@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.4.0 — 2026-07-23
+
+Identidade visual e boot sem fricção.
+
+- **Logo D0 ("G no cristal")** — marca aplicada no sistema inteiro: favicon, toolbar,
+  splash, ícone da janela/taskbar e `build/icon.ico` do instalador NSIS. Asset canônico
+  em `public/logo.svg`.
+- **Splash screen** — janela frameless instantânea (estilo Basalt) com logo, glow e barra
+  de progresso enquanto o backend sobe; a janela principal só aparece quando o renderer
+  sinaliza pronto (IPC `app:ready`, com fallbacks de 5s/12s).
+- **Welcome screen** — primeira execução sem repo salvo NÃO abre mais o seletor nativo
+  bloqueante: o app abre normal e mostra uma tela de boas-vindas com repos recentes,
+  Browse… e campo de path. A escolha persiste em `~/.gabbro/settings.json` e as próximas
+  aberturas vão direto pro diagrama. No server, boot "unconfigured" responde 409
+  (`code: unconfigured`) nas rotas de dado e aceita `PUT /api/repo` pra configurar.
+- **Auto-detecção do arquivo DBML** — se `database.dbml` não existe na raiz do worktree,
+  o Gabbro usa o primeiro `*.dbml` encontrado (repos usam `db.dbml`, `schema.dbml`...).
+  Reavaliado a cada troca de repo.
+- Fix: banner de worktree sujo listava `[object Object]` em vez do nome do arquivo.
+
 ## 0.3.0 — 2026-07-22
 
 App desktop.
