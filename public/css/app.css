@@ -775,18 +775,28 @@ body.mode-edit #tabs .tab[data-tab="docs"]{display:none}
 .sp-cell.sp-empty{background:#00000020}
 .sp-hunk{color:var(--accent);padding:3px 10px;background:#ffffff06;border-top:1px solid var(--border)}
 
-/* ---------- modo histórico (dialog quase tela cheia, 3 colunas) ---------- */
+/* ---------- modo histórico (dialog quase tela cheia, 3 colunas + margem) ----------
+ * uma janela flutuante com margem (--hm) sobre um backdrop; header + 3 colunas:
+ * lista de commits | código git lado a lado | diagrama+mudanças (#main) */
+:root{--hm:22px;--hm-hd:44px}
+#histBackdrop,#histTop,#histSide,#histCode{display:none}
 body.hist-mode #toolbar,body.hist-mode #subbar,body.hist-mode #banners{display:none}
-#histTop{position:absolute;top:0;left:0;right:0;height:46px;z-index:60;display:flex;align-items:center;gap:10px;
-  padding:0 12px;background:linear-gradient(180deg,#161d21,#10171a);border-bottom:2px solid #2c586b}
+body.hist-mode #histBackdrop{display:block;position:fixed;inset:0;z-index:54;
+  background:rgba(6,9,11,.66);backdrop-filter:blur(1px)}
+/* header da janela */
+body.hist-mode #histTop{display:flex;position:fixed;top:var(--hm);left:var(--hm);right:var(--hm);height:var(--hm-hd);
+  z-index:60;align-items:center;gap:10px;padding:0 8px 0 14px;border-radius:12px 12px 0 0;
+  background:linear-gradient(180deg,#161d21,#10171a);border:1px solid #2c586b;border-bottom-width:2px;
+  box-shadow:0 20px 60px rgba(0,0,0,.6)}
 #histTop .logo-mark{width:22px;height:22px;flex:none}
 #histTop .ht-badge{font-size:10px;font-weight:800;letter-spacing:.6px;color:#a8dcec;
   background:#16303a;border:1px solid #2c586b;border-radius:7px;padding:3px 9px}
-#histTop .ht-info{font-size:12.5px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:44vw}
+#histTop .ht-info{font-size:12.5px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:40vw}
 #histTop .ht-hint{font-size:11.5px;color:var(--muted)}
-/* colunas */
-#histSide{position:absolute;left:0;top:46px;bottom:0;width:290px;z-index:58;display:flex;flex-direction:column;
-  background:#161b1f;border-right:1px solid var(--border)}
+/* coluna 1 — lista de commits */
+body.hist-mode #histSide{display:flex;position:fixed;left:var(--hm);top:calc(var(--hm) + var(--hm-hd));bottom:var(--hm);
+  width:290px;z-index:58;flex-direction:column;background:#161b1f;
+  border:1px solid var(--border);border-top:0;border-radius:0 0 0 12px}
 .hs-head{padding:11px 14px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;
   color:var(--muted);border-bottom:1px solid #ffffff08;display:flex;flex-direction:column;gap:2px}
 .hs-head .hs-sub{font-weight:500;text-transform:none;letter-spacing:0;font-size:10.5px;opacity:.8}
@@ -801,9 +811,13 @@ body.hist-mode #toolbar,body.hist-mode #subbar,body.hist-mode #banners{display:n
 .hv-top{display:flex;align-items:center;gap:7px;min-width:0}
 .hv-msg{font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .hv-sub{display:flex;align-items:center;gap:6px;margin-top:3px;font-size:10.5px;color:var(--muted)}
-#histCode{position:absolute;left:290px;top:46px;bottom:0;width:40vw;z-index:57;display:flex;flex-direction:column;
-  background:var(--editor-bg);border-right:1px solid var(--border)}
+/* coluna 2 — código do commit (lado a lado) */
+body.hist-mode #histCode{display:flex;position:fixed;left:calc(var(--hm) + 290px);top:calc(var(--hm) + var(--hm-hd));
+  bottom:var(--hm);width:38vw;z-index:57;flex-direction:column;background:var(--editor-bg);
+  border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
 .hc-head{height:30px;display:flex;align-items:center;padding:0 12px;font-size:11.5px;color:var(--muted);
   background:#161b24;border-bottom:1px solid var(--border);flex:none}
 #histCodePre{flex:1;margin:0;overflow:auto;padding:0;font:12px/1.5 ui-monospace,Consolas,monospace;color:#c9d1e0}
-body.hist-mode #main{top:46px;left:calc(290px + 40vw)}
+/* coluna 3 — diagrama + mudanças (#main reposicionado dentro da janela) */
+body.hist-mode #main{top:calc(var(--hm) + var(--hm-hd));left:calc(var(--hm) + 290px + 38vw);
+  right:var(--hm);bottom:var(--hm);border:1px solid var(--border);border-top:0;border-radius:0 0 12px 0;overflow:hidden}

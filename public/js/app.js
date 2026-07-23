@@ -1159,6 +1159,7 @@ async function boot () {
   hist.initHistory({ onOpenCommit: openHistoryCommit, onExit: exitHistory, fail })
   $('histExit').addEventListener('click', exitHistory)
   $('histExitBtn').addEventListener('click', exitHistory)
+  $('histBackdrop').addEventListener('click', exitHistory)
   $('histSideMore').addEventListener('click', () => loadHistViewPage().catch(fail))
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape' && document.body.classList.contains('hist-mode')) exitHistory()

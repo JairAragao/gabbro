@@ -73,9 +73,10 @@
     </div>
   </div>
 
-  <!-- Modo histórico (dialog quase tela cheia): header + 3 colunas
+  <!-- Modo histórico (dialog quase tela cheia): backdrop + header + 3 colunas
        (lista de commits | código git lado a lado | diagrama+mudanças no #main) -->
-  <div id="histTop" class="hidden">
+  <div id="histBackdrop"></div>
+  <div id="histTop">
     <svg class="logo-mark" aria-hidden="true"><use href="#logoMark"/></svg>
     <span class="ht-badge">HIST&Oacute;RICO</span>
     <span class="ht-info" id="histTopInfo"></span>
@@ -83,12 +84,12 @@
     <span class="ht-hint">Somente leitura &mdash; comparando o commit com o anterior</span>
     <button class="btn" id="histExitBtn">&#10005; Sair</button>
   </div>
-  <aside id="histSide" class="hidden">
+  <aside id="histSide">
     <div class="hs-head">Commits <span class="hs-sub">clique num commit de schema</span></div>
     <div id="histSideList" class="thin-scroll"></div>
     <button class="btn sm hidden" id="histSideMore">Carregar mais</button>
   </aside>
-  <section id="histCode" class="hidden">
+  <section id="histCode">
     <div class="hc-head">C&oacute;digo &mdash; commit vs anterior</div>
     <pre id="histCodePre" class="sp thin-scroll"></pre>
   </section>
