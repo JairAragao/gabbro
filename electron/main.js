@@ -1,5 +1,6 @@
 // Basalt pattern: start the EXISTING express backend on a free loopback port
-// and open a window on that URL (same origin, no CORS).
+// and open a window on that URL (same origin, no CORS). A frameless splash
+// covers the boot; the main window reveals when the renderer signals ready.
 
 'use strict'
 
@@ -13,8 +14,50 @@ Menu.setApplicationMenu(null)
 const gotLock = app.requestSingleInstanceLock()
 if (!gotLock) app.quit()
 
+const APP_ICON = path.join(__dirname, 'icon.png')
+
 let mainWindow = null
+let splashWin = null
 let serverListener = null
+let revealed = false
+let splashAt = 0
+const MIN_SPLASH_MS = 2400 // the splash bar fills in ~2.2s
+
+// Opens instantly (tiny local HTML) while the backend boots and the renderer
+// loads. Frameless, same size as the main window, always on top until reveal.
+function createSplash () {
+  splashWin = new BrowserWindow({
+    width: 1280,
+    height: 820,
+    frame: false,
+    center: true,
+    backgroundColor: '#0b0e12',
+    skipTaskbar: true,
+    alwaysOnTop: true,
+    show: true,
+    icon: APP_ICON
+  })
+  splashWin.maximize() // matches the maximized main window
+  splashWin.loadFile(path.join(__dirname, 'splash.html'))
+  splashWin.on('closed', () => { splashWin = null })
+  splashAt = Date.now()
+}
+
+// Shows the main window and closes the splash (idempotent, honors the
+// minimum splash time so the bar animation completes).
+function reveal () {
+  if (revealed) return
+  const waited = splashAt ? Date.now() - splashAt : MIN_SPLASH_MS
+  if (waited < MIN_SPLASH_MS) { setTimeout(reveal, MIN_SPLASH_MS - waited); return }
+  revealed = true
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    // maximize() already SHOWS the window — that's why it runs here and not at
+    // creation, otherwise the app would flash before the splash finished.
+    mainWindow.maximize()
+    if (!mainWindow.isVisible()) mainWindow.show()
+  }
+  if (splashWin) { splashWin.close(); splashWin = null }
+}
 
 function createWindow (url) {
   mainWindow = new BrowserWindow({
@@ -22,8 +65,10 @@ function createWindow (url) {
     height: 820,
     minWidth: 940,
     minHeight: 640,
+    show: false, // revealed when the renderer signals ready (closes the splash)
     backgroundColor: '#232a36',
     title: 'Gabbro',
+    icon: APP_ICON,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -31,7 +76,10 @@ function createWindow (url) {
     }
   })
   mainWindow.loadURL(url)
-  mainWindow.maximize()
+
+  // Reveal fallbacks in case the renderer never signals (the IPC path wins).
+  mainWindow.webContents.once('did-finish-load', () => setTimeout(reveal, 5000))
+  setTimeout(reveal, 12000) // hard fallback
 
   // External links open in the default browser, not an Electron window.
   mainWindow.webContents.setWindowOpenHandler(({ url: target }) => {
@@ -40,6 +88,9 @@ function createWindow (url) {
   })
   mainWindow.on('closed', () => { mainWindow = null })
 }
+
+// Renderer finished booting (welcome screen or full app) → reveal.
+ipcMain.on('app:ready', () => reveal())
 
 // Auto-update from public GitHub Releases (no token). Downloads in background;
 // the renderer shows a "restart to update" banner (update:status IPC), no
@@ -80,27 +131,16 @@ ipcMain.handle('dialog:pickFolder', async () => {
   return res.canceled || !res.filePaths.length ? null : res.filePaths[0]
 })
 
-// Resolve the repo BEFORE requiring the server (config.js reads env at require
-// time): saved lastRepo, else ask with the native picker.
-function resolveRepoOrAsk () {
+// Resolve the saved repo BEFORE requiring the server (config.js reads env at
+// require time). No repo saved (or gone) → the server boots UNCONFIGURED and
+// the renderer shows the welcome screen — never a blocking native dialog.
+function resolveSavedRepo () {
   const settings = require('../server/settings')
   const s = settings.read()
   if (typeof s.lastRepo === 'string' && s.lastRepo && fs.existsSync(path.join(s.lastRepo, '.git'))) {
-    return Promise.resolve(s.lastRepo)
+    return s.lastRepo
   }
-  return dialog.showOpenDialog({
-    title: 'Gabbro — choose the git clone of your DBML repo',
-    properties: ['openDirectory']
-  }).then(res => {
-    if (res.canceled || !res.filePaths.length) return null
-    const p = res.filePaths[0]
-    if (!fs.existsSync(path.join(p, '.git'))) {
-      dialog.showErrorBox('Gabbro', `Not a git repository (missing .git):\n${p}`)
-      return null
-    }
-    settings.rememberRepo(p)
-    return p
-  })
+  return null
 }
 
 function startServer () {
@@ -115,14 +155,15 @@ function startServer () {
 }
 
 app.whenReady().then(async () => {
+  createSplash()
   try {
-    const repoPath = await resolveRepoOrAsk()
-    if (!repoPath) { app.quit(); return }
-    process.env.GABBRO_REPO = repoPath
+    const repoPath = resolveSavedRepo()
+    if (repoPath) process.env.GABBRO_REPO = repoPath
     const url = await startServer()
     createWindow(url)
     setupAutoUpdate()
   } catch (e) {
+    if (splashWin) { splashWin.close(); splashWin = null }
     dialog.showErrorBox('Gabbro — failed to start', String((e && e.message) || e))
     app.quit()
   }

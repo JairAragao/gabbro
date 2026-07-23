@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <style>
+      html, body { margin: 0; height: 100%; overflow: hidden; }
+      body {
+        background: radial-gradient(130% 100% at 50% 38%, #1a2029 0%, #0b0e12 62%);
+        color: #e6e9f0;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+        -webkit-user-select: none; user-select: none;
+      }
+      .stage { display: flex; flex-direction: column; align-items: center; gap: 16px; animation: rise .7s ease-out both; }
+
+      /* logo without a frame — just the mark with a radial light behind it */
+      .logo { position: relative; display: grid; place-items: center; width: 240px; height: 240px; }
+      .logo::before {
+        content: ''; position: absolute; inset: -20px; border-radius: 50%;
+        background: radial-gradient(circle, rgba(143,179,160,.4) 0%, rgba(143,179,160,.14) 42%, transparent 70%);
+        animation: pulse 2.8s ease-in-out infinite;
+      }
+      .logo svg {
+        position: relative; z-index: 1;
+        width: 190px; height: 190px;
+        filter: drop-shadow(0 0 24px rgba(143,179,160,.35));
+      }
+
+      .title { font-size: 32px; font-weight: 700; letter-spacing: .4px; text-shadow: 0 0 50px rgba(143,179,160,.35); }
+      .sub { font-size: 13px; color: #98a2b3; margin-top: -10px; letter-spacing: .3px; }
+
+      /* determinate bar — fills 0→100%, synced with MIN_SPLASH_MS in main.js */
+      .bar { width: 320px; height: 5px; background: #1d232e; border-radius: 999px; overflow: hidden; margin-top: 8px; }
+      .bar > i {
+        display: block; height: 100%; width: 0;
+        background: linear-gradient(90deg, #3e6b55, #8fb3a0 55%, #d7e2d4);
+        border-radius: 999px;
+        box-shadow: 0 0 12px rgba(143,179,160,.5);
+        animation: fill 2.2s cubic-bezier(.3,.6,.3,1) forwards;
+      }
+
+      @keyframes pulse {
+        0%, 100% { opacity: .6; transform: scale(.94); }
+        50% { opacity: 1; transform: scale(1.06); }
+      }
+      @keyframes fill { from { width: 0; } to { width: 100%; } }
+      @keyframes rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+  </head>
+  <body>
+    <div class="stage">
+      <div class="logo">
+        <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+          <g stroke="#0f1315" stroke-width=".7" stroke-opacity=".4" stroke-linejoin="round">
+            <polygon points="50,4 89,26.5 50,50" fill="#272e32"/>
+            <polygon points="89,26.5 89,71.5 50,50" fill="#1d2225"/>
+            <polygon points="89,71.5 50,96 50,50" fill="#23292e"/>
+            <polygon points="50,96 11,71.5 50,50" fill="#181d20"/>
+            <polygon points="11,71.5 11,26.5 50,50" fill="#212729"/>
+            <polygon points="11,26.5 50,4 50,50" fill="#2b3236"/>
+          </g>
+          <path d="M 69,33 L 52,23 L 32,35 L 32,64 L 52,76 L 69,66 L 69,51 L 52,51"
+                fill="none" stroke="#8fb3a0" stroke-width="8"
+                stroke-linejoin="bevel" stroke-linecap="square"/>
+          <path d="M 69,33 L 52,23 L 32,35" fill="none" stroke="#d7e2d4" stroke-width="2.6"
+                stroke-linejoin="bevel" stroke-linecap="square"/>
+        </svg>
+      </div>
+      <div class="title">Gabbro</div>
+      <div class="sub">loading your schema&hellip;</div>
+      <div class="bar"><i></i></div>
+    </div>
+  </body>
+</html>

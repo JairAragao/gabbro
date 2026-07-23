@@ -36,8 +36,14 @@ if (cfg.mode === 'local') {
 }
 
 // Repo clone/bootstrap runs async on boot; API answers 503 until it is ready.
+// Unconfigured (Electron welcome screen) is NOT 503 — the front must not
+// retry, it must show the welcome screen (409 + code). /repo stays reachable
+// so the welcome screen can list recents and configure the first repo.
 app.use('/api', (req, res, next) => {
-  if (req.path === '/health') return next()
+  if (req.path === '/health' || req.path === '/repo') return next()
+  if (!cfg.configured()) {
+    return res.status(409).json({ error: 'no repository configured', code: 'unconfigured' })
+  }
   if (!repo.state.repoCloned) return res.status(503).json({ error: 'repository not ready' })
   next()
 })
@@ -48,7 +54,7 @@ app.get('/api/health', (req, res) => {
   if (repo.state.initError) {
     return res.status(503).json({ ok: false, error: 'repository init failed', repoCloned: false })
   }
-  res.json({ ok: true, repoCloned: repo.state.repoCloned, lastFetch: repo.state.lastFetch })
+  res.json({ ok: true, configured: cfg.configured(), repoCloned: repo.state.repoCloned, lastFetch: repo.state.lastFetch })
 })
 
 app.get('/api/config', wrap(async (req, res) => {
@@ -188,12 +194,13 @@ app.get('/api/sync-state', wrap(async (req, res) => {
 app.get('/api/repo', (req, res) => {
   // Hosted: never expose local filesystem paths/recents of the host machine.
   if (cfg.mode !== 'local') {
-    return res.json({ mode: cfg.mode, path: null, repoName: cfg.repoName, recents: [] })
+    return res.json({ mode: cfg.mode, configured: true, path: null, repoName: cfg.repoName, recents: [] })
   }
   const s = settings.read()
   res.json({
     mode: cfg.mode,
-    path: cfg.repoDir(),
+    configured: cfg.configured(),
+    path: cfg.configured() ? cfg.repoDir() : null,
     repoName: cfg.repoName,
     recents: Array.isArray(s.recentRepos) ? s.recentRepos.filter(p => typeof p === 'string') : []
   })
@@ -214,9 +221,11 @@ app.put('/api/repo', wrap(async (req, res) => {
   // Serialized so the switch never lands mid-commit of the previous repo.
   await repo.serialize(async () => {
     cfg.setRepo(abs)
+    cfg.autoDetectDbml()
     local.onRepoSwitch()
     repo.state.lastFetch = 0
     repo.state.initError = null
+    repo.initLocal() // first configuration after an unconfigured boot flips repoCloned
     settings.rememberRepo(abs)
   })
   res.json({ ok: true, path: abs, repoName: cfg.repoName, currentBranch: await local.currentBranch() })
@@ -319,13 +328,19 @@ module.exports = app
 
 if (cfg.mode === 'local') {
   // Operate directly on the user's clone — no intermediate clone, no bootstrap,
-  // no identity injection.
-  try {
-    repo.initLocal()
-    console.log(`repository ready (local worktree ${cfg.repoDir()})`)
-  } catch (e) {
-    repo.state.initError = repo.sanitize(e.message)
-    console.error(`repository init failed: ${repo.state.initError}`)
+  // no identity injection. Unconfigured boot: nothing to init — the welcome
+  // screen configures the first repo via PUT /api/repo.
+  if (!cfg.configured()) {
+    console.log('no repository configured yet — waiting for the welcome screen')
+  } else {
+    try {
+      cfg.autoDetectDbml()
+      repo.initLocal()
+      console.log(`repository ready (local worktree ${cfg.repoDir()})`)
+    } catch (e) {
+      repo.state.initError = repo.sanitize(e.message)
+      console.error(`repository init failed: ${repo.state.initError}`)
+    }
   }
 } else {
   repo.ensureClone()

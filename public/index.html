@@ -4,12 +4,34 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Gabbro</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%231b222d'/><rect x='5' y='7' width='9' height='18' rx='2' fill='%237fd1e6'/><rect x='18' y='7' width='9' height='18' rx='2' fill='%23c99bf0'/><line x1='14' y1='13' x2='18' y2='13' stroke='%23dfe6f0' stroke-width='1.6'/></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><g stroke='%230f1315' stroke-width='.7' stroke-opacity='.4' stroke-linejoin='round'><polygon points='50,4 89,26.5 50,50' fill='%23272e32'/><polygon points='89,26.5 89,71.5 50,50' fill='%231d2225'/><polygon points='89,71.5 50,96 50,50' fill='%2323292e'/><polygon points='50,96 11,71.5 50,50' fill='%23181d20'/><polygon points='11,71.5 11,26.5 50,50' fill='%23212729'/><polygon points='11,26.5 50,4 50,50' fill='%232b3236'/></g><path d='M 69,33 L 52,23 L 32,35 L 32,64 L 52,76 L 69,66 L 69,51 L 52,51' fill='none' stroke='%238fb3a0' stroke-width='8' stroke-linejoin='bevel' stroke-linecap='square'/><path d='M 69,33 L 52,23 L 32,35' fill='none' stroke='%23d7e2d4' stroke-width='2.6' stroke-linejoin='bevel' stroke-linecap='square'/></svg>">
 <meta name="theme-color" content="#232a36">
 <link rel="stylesheet" href="css/app.css">
 </head>
 <body class="mode-view">
+  <!-- Gabbro mark (D0 — "G no cristal") shared by toolbar and welcome screen -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <symbol id="logoMark" viewBox="0 0 100 100">
+        <g stroke="#0f1315" stroke-width=".7" stroke-opacity=".4" stroke-linejoin="round">
+          <polygon points="50,4 89,26.5 50,50" fill="#272e32"/>
+          <polygon points="89,26.5 89,71.5 50,50" fill="#1d2225"/>
+          <polygon points="89,71.5 50,96 50,50" fill="#23292e"/>
+          <polygon points="50,96 11,71.5 50,50" fill="#181d20"/>
+          <polygon points="11,71.5 11,26.5 50,50" fill="#212729"/>
+          <polygon points="11,26.5 50,4 50,50" fill="#2b3236"/>
+        </g>
+        <path d="M 69,33 L 52,23 L 32,35 L 32,64 L 52,76 L 69,66 L 69,51 L 52,51"
+              fill="none" stroke="#8fb3a0" stroke-width="8"
+              stroke-linejoin="bevel" stroke-linecap="square"/>
+        <path d="M 69,33 L 52,23 L 32,35" fill="none" stroke="#d7e2d4" stroke-width="2.6"
+              stroke-linejoin="bevel" stroke-linecap="square"/>
+      </symbol>
+    </defs>
+  </svg>
+
   <div id="toolbar">
+    <svg class="logo-mark" aria-hidden="true"><use href="#logoMark"/></svg>
     <span class="logo">Gabbro</span>
     <button class="repo-btn" id="repoBtn" title="Repository">
       <span class="meta" id="repoName"></span><span id="repoCaret" class="hidden">&#9662;</span>
@@ -133,6 +155,27 @@
         <button class="btn hidden" id="histMore">Load more</button>
       </div>
     </section>
+  </div>
+
+  <!-- Welcome screen — shown on an unconfigured boot instead of a native
+       folder dialog. The chosen repo is persisted (~/.gabbro/settings.json). -->
+  <div id="welcome" class="hidden">
+    <div class="wl-card">
+      <svg class="wl-logo" aria-hidden="true"><use href="#logoMark"/></svg>
+      <h1 class="wl-title">Gabbro</h1>
+      <p class="wl-sub">Git-native DBML studio &mdash; diagram, docs, diff and history for your database schema.</p>
+      <div class="wl-open">
+        <div class="wl-section">Open a repository</div>
+        <div id="wlRecents"></div>
+        <div id="wlNoRecents" class="wl-empty hidden">no recent repositories</div>
+        <div class="wl-row">
+          <input id="wlPath" placeholder="Path to a git clone&hellip;" autocomplete="off" spellcheck="false">
+          <button class="btn hidden" id="wlBrowse">Browse&hellip;</button>
+          <button class="btn primary" id="wlOpen">Open</button>
+        </div>
+        <p class="wl-hint">Pick the clone that holds your <code>.dbml</code> file (detected automatically at the repo root). Gabbro remembers it &mdash; next launch opens straight into the diagram.</p>
+      </div>
+    </div>
   </div>
 
   <div id="tip"></div>

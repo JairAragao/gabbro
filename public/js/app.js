@@ -324,7 +324,7 @@ function applySyncState (s) {
   const db = $('dirtyBanner')
   if (db) {
     db.classList.toggle('hidden', !dirty)
-    if (dirty) db.textContent = `uncommitted changes in the worktree: ${s.dirty.join(', ')} — saving from Gabbro will include them in the commit`
+    if (dirty) db.textContent = `uncommitted changes in the worktree: ${s.dirty.map(d => d.file || d).join(', ')} — saving from Gabbro will include them in the commit`
   }
 }
 
@@ -436,6 +436,52 @@ function setupLocalChrome () {
   setInterval(refreshSyncBadge, 60000)
 }
 
+// Tells the Electron main process the renderer is usable → closes the splash.
+function signalDesktopReady () {
+  try {
+    if (window.gabbroDesktop && window.gabbroDesktop.signalReady) window.gabbroDesktop.signalReady()
+  } catch (e) { /* browser mode — no desktop bridge */ }
+}
+
+async function openFirstRepo (p) {
+  try {
+    await api.putRepo(p)
+    location.reload() // full boot with the repo configured
+  } catch (e) { fail(e) }
+}
+
+// Unconfigured boot (desktop, no saved repo): in-app chooser instead of a
+// blocking native dialog. The choice persists in ~/.gabbro/settings.json.
+function showWelcome (info) {
+  document.body.classList.add('welcome-on')
+  $('welcome').classList.remove('hidden')
+  const list = $('wlRecents')
+  list.innerHTML = ''
+  const recents = (info.recents || []).filter(x => typeof x === 'string')
+  for (const rp of recents) {
+    const it = document.createElement('button')
+    it.className = 'rm-item'
+    it.textContent = rp
+    it.title = rp
+    it.addEventListener('click', () => openFirstRepo(rp))
+    list.appendChild(it)
+  }
+  $('wlNoRecents').classList.toggle('hidden', recents.length > 0)
+  if (window.gabbroDesktop) {
+    $('wlBrowse').classList.remove('hidden')
+    $('wlBrowse').addEventListener('click', async () => {
+      const p = await window.gabbroDesktop.pickFolder()
+      if (p) openFirstRepo(p)
+    })
+  }
+  $('wlOpen').addEventListener('click', () => {
+    const p = $('wlPath').value.trim()
+    if (p) openFirstRepo(p)
+  })
+  $('wlPath').addEventListener('keydown', e => { if (e.key === 'Enter') $('wlOpen').click() })
+  $('wlPath').focus()
+}
+
 function handleHash () {
   if (location.hash.startsWith('#tbl-')) {
     const name = decodeURIComponent(location.hash.slice(5))
@@ -504,6 +550,11 @@ async function boot () {
   window.addEventListener('hashchange', handleHash)
 
   try {
+    const repoInfo = await api.getRepo()
+    if (repoInfo.mode === 'local' && repoInfo.configured === false) {
+      showWelcome(repoInfo)
+      return
+    }
     state.config = await api.getConfig()
     state.currentBranch = state.config.currentBranch
     document.title = `Gabbro — ${state.config.repoName}`
@@ -535,4 +586,4 @@ async function boot () {
   } catch (e) { fail(e) }
 }
 
-boot()
+boot().finally(signalDesktopReady)
