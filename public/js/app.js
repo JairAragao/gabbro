@@ -769,6 +769,9 @@ function initSettingsUi () {
     // settings.json — empurrar o default daqui religaria o auto-update
     usel.addEventListener('change', () => {
       if (!UPD_INTERVALS.includes(usel.value)) return
+      // mantém o config em sincronia — senão reentrar na aba compara com o
+      // valor estagnado do boot e reverte a escolha do usuário
+      if (state.config) state.config.updateIntervalMs = Number(usel.value)
       try { localStorage.setItem(UPD_INTERVAL_KEY, usel.value) } catch (e) { /* storage cheio */ }
       try { window.gabbroDesktop.setUpdateInterval(Number(usel.value)) } catch (e) { /* preload antigo */ }
       updHint()
