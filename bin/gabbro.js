@@ -12,13 +12,13 @@ const settings = require('../server/settings')
 
 const arg = process.argv[2]
 if (arg === '--help' || arg === '-h') {
-  console.log('usage: gabbro [repo-path]\n\nOpens the Gabbro DBML studio on a local git clone.\nWithout a path, reuses the last opened repo (or env GIT_REPO).')
+  console.log('uso: gabbro [caminho-do-repo]\n\nAbre o estúdio DBML Gabbro num clone git local.\nSem caminho, reusa o último repo aberto (ou a env GIT_REPO).')
   process.exit(0)
 }
 if (arg) {
   const abs = path.resolve(arg)
   if (!fs.existsSync(path.join(abs, '.git'))) {
-    console.error(`not a git repository (missing .git): ${abs}`)
+    console.error(`não é um repositório git (sem .git): ${abs}`)
     process.exit(1)
   }
   // config.js gives the CLI arg top priority via this env var.
@@ -62,13 +62,13 @@ async function main () {
         })
         if (!r.ok) {
           const j = await r.json().catch(() => null)
-          console.error(`could not switch running instance to ${process.env.GABBRO_REPO}: ${(j && j.error) || r.status}`)
+          console.error(`não consegui trocar a instância aberta para ${process.env.GABBRO_REPO}: ${(j && j.error) || r.status}`)
         }
       } catch (e) {
-        console.error(`could not switch running instance: ${e.message}`)
+        console.error(`não consegui trocar a instância aberta: ${e.message}`)
       }
     }
-    console.log(`gabbro already running on :${cfg.port} — opening browser`)
+    console.log(`gabbro já rodando na :${cfg.port} — abrindo o navegador`)
     openBrowser(url)
     return
   }

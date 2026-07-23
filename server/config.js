@@ -23,7 +23,7 @@ const gitRepo = resolveRepo()
 // welcome screen and configures one via PUT /api/repo. Plain node/CLI keeps
 // the hard error (nothing would ever configure it there).
 if (!gitRepo && !process.versions.electron) {
-  console.error('no repository: run `gabbro <path>` or set GIT_REPO (https URL or local filesystem path)')
+  console.error('sem repositório: rode `gabbro <caminho>` ou defina GIT_REPO (URL https ou caminho local)')
   process.exit(1)
 }
 

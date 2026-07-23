@@ -158,10 +158,10 @@ check('payload: malformed entries dropped', bad.commits.length === 0 && bad.hasM
 check('payload: garbage input safe', normalizeHistory(null).commits.length === 0)
 check('firstLine takes first line', firstLine(payload.commits[0].message) === 'docs(dbml): add mrp tables')
 const now = new Date('2026-07-22T14:00:00-03:00').getTime()
-check('relativeTime hours', relativeTime('2026-07-22T10:00:00-03:00', now) === '4h ago')
+check('relativeTime hours', relativeTime('2026-07-22T10:00:00-03:00', now) === 'há 4h')
 check('relativeTime bad date falls back', relativeTime('not-a-date', now) === 'not-a-date')
 
-check('summary line +/~/-', diffSummaryLine(d) === '+1 table, ~2 changed, -1 removed', diffSummaryLine(d))
+check('summary line +/~/-', diffSummaryLine(d) === '+1 tabela, ~2 alteradas, -1 removida', diffSummaryLine(d))
 check('summary line empty diff', diffSummaryLine(diffModels(base, base)) === '')
 
 const repoPath = process.argv[3]
@@ -181,8 +181,8 @@ if (repoPath) {
   check('creation commit: parent empty → all tables added',
     firstModel.order.length > 0 && allAdded &&
     Object.keys(creation.tables).length === firstModel.order.length)
-  check('creation commit: summary line says +N tables',
-    diffSummaryLine(creation) === `+${firstModel.order.length} tables`, diffSummaryLine(creation))
+  check('creation commit: summary line says +N tabelas',
+    diffSummaryLine(creation) === `+${firstModel.order.length} tabelas`, diffSummaryLine(creation))
 
   // (b) newest commit vs its parent — statuses cross-checked against set
   // membership computed independently from the two parsed models

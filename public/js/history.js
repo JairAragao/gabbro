@@ -26,25 +26,26 @@ export function relativeTime (iso, now = Date.now()) {
   const t = new Date(iso).getTime()
   if (!Number.isFinite(t)) return String(iso || '')
   const s = Math.round((now - t) / 1000)
-  if (s < 45) return 'just now'
+  if (s < 45) return 'agora mesmo'
   const m = Math.round(s / 60)
-  if (m < 60) return `${m}m ago`
+  if (m < 60) return `há ${m}min`
   const h = Math.round(m / 60)
-  if (h < 24) return `${h}h ago`
+  if (h < 24) return `há ${h}h`
   const d = Math.round(h / 24)
-  if (d < 30) return `${d}d ago`
+  if (d < 30) return `há ${d}d`
   const mo = Math.round(d / 30)
-  if (mo < 12) return `${mo}mo ago`
-  return `${Math.round(mo / 12)}y ago`
+  if (mo < 12) return `há ${mo} ${mo === 1 ? 'mês' : 'meses'}`
+  const y = Math.round(mo / 12)
+  return `há ${y} ano${y === 1 ? '' : 's'}`
 }
 
 export function absoluteTime (iso) {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return String(iso || '')
-  return d.toLocaleString()
+  return d.toLocaleString('pt-BR')
 }
 
-export const firstLine = msg => (msg || '').split('\n')[0] || '(no message)'
+export const firstLine = msg => (msg || '').split('\n')[0] || '(sem mensagem)'
 
 const $ = id => document.getElementById(id)
 
@@ -96,7 +97,7 @@ async function loadPage () {
   state.loading = true
   const btn = $('histMore')
   btn.disabled = true
-  btn.textContent = 'Loading…'
+  btn.textContent = 'Carregando…'
   try {
     const page = normalizeHistory(await api.getHistory(state.skip, PAGE))
     const startIndex = state.commits.length
@@ -108,7 +109,7 @@ async function loadPage () {
   } finally {
     state.loading = false
     btn.disabled = false
-    btn.textContent = 'Load more'
+    btn.textContent = 'Carregar mais'
     btn.classList.toggle('hidden', !state.hasMore)
   }
 }
@@ -135,7 +136,7 @@ function renderRows (commits, startIndex) {
     if (idx === 0) {
       const cur = document.createElement('span')
       cur.className = 'hist-pill current'
-      cur.textContent = 'current'
+      cur.textContent = 'atual'
       top.appendChild(cur)
     }
     li.appendChild(top)
@@ -161,7 +162,7 @@ const sep = () => Object.assign(document.createElement('span'), { className: 'hi
 function author (c) {
   const el = document.createElement('span')
   el.className = 'hist-author'
-  el.textContent = c.authorName || c.authorEmail || 'unknown'
+  el.textContent = c.authorName || c.authorEmail || 'desconhecido'
   el.title = c.authorEmail
   return el
 }
@@ -178,7 +179,7 @@ export function setActive (commit) {
   $('histDetailHash').textContent = commit.shortHash || commit.hash.slice(0, 7)
   $('histDetailMsg').textContent = firstLine(commit.message)
   $('histDetailMeta').textContent =
-    `${commit.authorName || commit.authorEmail || 'unknown'} · ${absoluteTime(commit.date)}`
+    `${commit.authorName || commit.authorEmail || 'desconhecido'} · ${absoluteTime(commit.date)}`
   if (state.diffShownFor !== commit.hash) hideTextDiff()
   panel.classList.remove('hidden')
 }
@@ -191,7 +192,7 @@ function markActive () {
 
 function hideTextDiff () {
   $('histDiffPre').classList.add('hidden')
-  $('histDiffToggle').textContent = 'Show text diff'
+  $('histDiffToggle').textContent = 'Mostrar diff textual'
   state.diffShownFor = null
 }
 
@@ -203,14 +204,14 @@ async function toggleTextDiff () {
   btn.disabled = true
   try {
     if (state.diffShownFor !== state.activeHash || !pre.textContent) {
-      pre.textContent = 'Loading…'
+      pre.textContent = 'Carregando…'
       pre.classList.remove('hidden')
-      pre.textContent = (await api.getCommitDiff(state.activeHash)) || '(no text diff)'
+      pre.textContent = (await api.getCommitDiff(state.activeHash)) || '(sem diff textual)'
       state.diffShownFor = state.activeHash
     } else {
       pre.classList.remove('hidden')
     }
-    btn.textContent = 'Hide text diff'
+    btn.textContent = 'Ocultar diff textual'
   } finally {
     btn.disabled = false
   }
