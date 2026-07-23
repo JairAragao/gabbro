@@ -11,5 +11,12 @@ contextBridge.exposeInMainWorld('gabbroDesktop', {
   onUpdateStatus: cb => ipcRenderer.on('update:status', (_e, payload) => cb(payload)),
   installUpdate: () => ipcRenderer.send('update:install'),
   checkUpdates: () => ipcRenderer.send('update:check'),
-  setUpdateInterval: ms => ipcRenderer.send('update:set-interval', ms)
+  setUpdateInterval: ms => ipcRenderer.send('update:set-interval', ms),
+  win: {
+    minimize: () => ipcRenderer.send('window:minimize'),
+    maximize: () => ipcRenderer.send('window:maximize'),
+    close: () => ipcRenderer.send('window:close'),
+    isMaximized: () => ipcRenderer.invoke('window:isMaximized'),
+    onMaximizeChange: cb => ipcRenderer.on('window:maximized', (_e, v) => cb(v))
+  }
 })

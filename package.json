@@ -12,6 +12,7 @@
   "scripts": {
     "start": "node server/index.js",
     "electron": "electron .",
+    "electron:dev": "electron .",
     "electron:pack": "electron-builder --dir",
     "electron:build": "electron-builder"
   },

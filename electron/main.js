@@ -7,7 +7,13 @@
 const path = require('path')
 const fs = require('fs')
 const { app, BrowserWindow, Menu, ipcMain, dialog, shell } = require('electron')
-const { autoUpdater } = require('electron-updater')
+// electron-updater carrega o app.getVersion() no require — lazy pra não
+// quebrar em dev (electron . / não empacotado); só instancia ao atualizar
+let _autoUpdater = null
+function autoUpdater () {
+  if (!_autoUpdater) _autoUpdater = require('electron-updater').autoUpdater
+  return _autoUpdater
+}
 
 Menu.setApplicationMenu(null)
 
@@ -66,6 +72,7 @@ function createWindow (url) {
     minWidth: 940,
     minHeight: 640,
     show: false, // revealed when the renderer signals ready (closes the splash)
+    frame: false, // barra de título custom (logo + repo + modo na própria barra)
     backgroundColor: '#1a1f21',
     title: 'Gabbro',
     icon: APP_ICON,
@@ -80,6 +87,15 @@ function createWindow (url) {
   // Reveal fallbacks in case the renderer never signals (the IPC path wins).
   mainWindow.webContents.once('did-finish-load', () => setTimeout(reveal, 5000))
   setTimeout(reveal, 12000) // hard fallback
+
+  // avisa o renderer quando maximiza/restaura (ícone do botão alterna)
+  const sendMax = () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('window:maximized', mainWindow.isMaximized())
+    }
+  }
+  mainWindow.on('maximize', sendMax)
+  mainWindow.on('unmaximize', sendMax)
 
   // External links open in the default browser, not an Electron window.
   mainWindow.webContents.setWindowOpenHandler(({ url: target }) => {
@@ -120,7 +136,7 @@ function sendUpdStatus (state, extra) {
 
 function checkForUpdates () {
   if (!app.isPackaged) { sendUpdStatus('uptodate'); return }
-  autoUpdater.checkForUpdates().catch(e => {
+  autoUpdater().checkForUpdates().catch(e => {
     console.error('[updater] check', (e && e.message) || e)
     sendUpdStatus('error')
   })
@@ -135,14 +151,15 @@ function scheduleUpdateChecks () {
 function setupAutoUpdate () {
   if (!app.isPackaged || updateReady) return
   updateReady = true
-  autoUpdater.autoDownload = true
-  autoUpdater.autoInstallOnAppQuit = true
-  autoUpdater.on('checking-for-update', () => sendUpdStatus('checking'))
-  autoUpdater.on('update-not-available', () => sendUpdStatus('uptodate'))
-  autoUpdater.on('update-available', info => sendUpdStatus('available', { version: info && info.version }))
-  autoUpdater.on('download-progress', p => sendUpdStatus('downloading', { percent: Math.round((p && p.percent) || 0) }))
-  autoUpdater.on('update-downloaded', info => sendUpdStatus('downloaded', { version: info && info.version }))
-  autoUpdater.on('error', e => {
+  const au = autoUpdater()
+  au.autoDownload = true
+  au.autoInstallOnAppQuit = true
+  au.on('checking-for-update', () => sendUpdStatus('checking'))
+  au.on('update-not-available', () => sendUpdStatus('uptodate'))
+  au.on('update-available', info => sendUpdStatus('available', { version: info && info.version }))
+  au.on('download-progress', p => sendUpdStatus('downloading', { percent: Math.round((p && p.percent) || 0) }))
+  au.on('update-downloaded', info => sendUpdStatus('downloaded', { version: info && info.version }))
+  au.on('error', e => {
     console.error('[updater]', (e && e.message) || e)
     sendUpdStatus('error')
   })
@@ -153,9 +170,18 @@ function setupAutoUpdate () {
   }
 }
 
+// controles da janela frameless (barra de título custom)
+ipcMain.on('window:minimize', () => { if (mainWindow) mainWindow.minimize() })
+ipcMain.on('window:maximize', () => {
+  if (!mainWindow) return
+  if (mainWindow.isMaximized()) mainWindow.unmaximize(); else mainWindow.maximize()
+})
+ipcMain.on('window:close', () => { if (mainWindow) mainWindow.close() })
+ipcMain.handle('window:isMaximized', () => !!(mainWindow && mainWindow.isMaximized()))
+
 ipcMain.on('update:install', () => {
   // silent NSIS install + relaunch (the assisted wizard stays manual-install-only)
-  try { autoUpdater.quitAndInstall(true, true) } catch (e) { console.error('[updater] install', (e && e.message) || e) }
+  try { autoUpdater().quitAndInstall(true, true) } catch (e) { console.error('[updater] install', (e && e.message) || e) }
 })
 
 ipcMain.on('update:check', () => checkForUpdates())
