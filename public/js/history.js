@@ -74,6 +74,18 @@ export async function ensureLoaded () {
   await reload()
 }
 
+// snapshot pros consumidores externos (sidebar do modo histórico)
+export function getCommits () { return state.commits.slice() }
+export function getActiveHash () { return state.activeHash }
+export function hasMore () { return state.hasMore }
+export async function loadMore () {
+  if (!state.hasMore || state.loading) return
+  await loadPage()
+}
+let changeCb = null
+export function onListChanged (cb) { changeCb = cb }
+function emitChanged () { if (changeCb) changeCb() }
+
 export function isAllFiles () { return state.allFiles }
 export async function setAllFiles (v) {
   if (state.allFiles === !!v) return
@@ -114,6 +126,7 @@ async function loadPage () {
     state.hasMore = page.hasMore
     renderRows(page.commits, startIndex)
     $('histEmpty').classList.toggle('hidden', state.commits.length > 0)
+    emitChanged()
   } finally {
     state.loading = false
     btn.disabled = false
@@ -196,6 +209,7 @@ function markActive () {
   document.querySelectorAll('#histList .hist-row').forEach(el => {
     el.classList.toggle('on', !!state.activeHash && el.dataset.hash === state.activeHash)
   })
+  emitChanged()
 }
 
 function hideTextDiff () {

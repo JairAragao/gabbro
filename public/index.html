@@ -32,46 +32,72 @@
     </defs>
   </svg>
 
-  <!-- Barra principal: identidade + repositório | modo (centro) -->
-  <div id="toolbar">
+  <!-- Barra de título (frameless): identidade + repo | modo + busca (centro) | janela -->
+  <div id="toolbar" class="tb-drag">
     <div class="tb-side tb-left">
       <svg class="logo-mark" aria-hidden="true"><use href="#logoMark"/></svg>
       <span class="logo">Gabbro</span>
       <button class="repo-btn" id="repoBtn" title="Repositório">
         <span class="meta" id="repoName"></span><span id="repoCaret" class="hidden">&#9662;</span>
       </button>
+      <select id="branchSel" title="Branch"></select>
     </div>
-    <div id="modeToggle">
-      <button id="modeView" class="on">Visualizar</button>
-      <button id="modeEdit">Editar</button>
+
+    <div class="tb-center">
+      <div id="modeToggle">
+        <button id="modeView" class="on">Visualizar</button>
+        <button id="modeEdit">Editar</button>
+      </div>
+      <div id="searchWrap">
+        <button id="searchBtn" class="btn icon" title="Buscar tabela ou coluna">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.8-3.8"/></svg>
+        </button>
+        <input id="search" placeholder="Buscar tabela ou coluna&hellip;" autocomplete="off" title="Enter = pr&oacute;ximo, Shift+Enter = anterior">
+        <span id="searchCount" class="hidden"></span>
+        <button id="searchPrev" class="search-nav hidden" title="Anterior (Shift+Enter)">‹</button>
+        <button id="searchNext" class="search-nav hidden" title="Pr&oacute;ximo (Enter)">›</button>
+        <select id="searchScope" title="Escopo da busca">
+          <option value="all" selected>Tudo</option>
+          <option value="tables">Tabelas</option>
+          <option value="columns">Colunas</option>
+        </select>
+      </div>
     </div>
-    <div class="tb-side tb-right"></div>
+
+    <div class="tb-side tb-right">
+      <div id="winCtrls" class="hidden">
+        <button class="win-btn" id="winMin" title="Minimizar">&#8211;</button>
+        <button class="win-btn" id="winMax" title="Maximizar">&#9633;</button>
+        <button class="win-btn win-close" id="winClose" title="Fechar">&#10005;</button>
+      </div>
+    </div>
   </div>
 
-  <!-- Segunda barra: abas + branch | busca (centro) | ações -->
+  <!-- Modo histórico (tela cheia): header + sidebar de commits (o diagrama e o
+       DBML ficam no #main por baixo, decorados com o diff do commit) -->
+  <div id="histTop" class="hidden">
+    <span class="ht-badge">HIST&Oacute;RICO</span>
+    <span class="ht-info" id="histTopInfo"></span>
+    <span class="spacer"></span>
+    <span class="ht-hint">Somente leitura — voc&ecirc; est&aacute; vendo um commit do passado</span>
+    <button class="btn" id="histExitBtn">&#10005; Sair do hist&oacute;rico</button>
+  </div>
+  <aside id="histSide" class="hidden">
+    <div class="hs-head">Commits do schema</div>
+    <div id="histSideList" class="thin-scroll"></div>
+    <button class="btn sm hidden" id="histSideMore">Carregar mais</button>
+  </aside>
+
+  <!-- Segunda barra: abas Diagrama/Docs | abas de comparação (centro) | ações -->
   <div id="subbar">
     <div class="sb-side sb-left">
       <nav id="tabs">
         <button class="tab on" data-tab="diagram">Diagrama</button>
         <button class="tab" data-tab="docs">Docs</button>
       </nav>
-      <select id="branchSel" title="Branch"></select>
     </div>
 
-    <div id="searchWrap">
-      <span class="search-ico">
-        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.8-3.8"/></svg>
-      </span>
-      <select id="searchScope" title="Escopo da busca">
-        <option value="all" selected>Tudo</option>
-        <option value="tables">Tabelas</option>
-        <option value="columns">Colunas</option>
-      </select>
-      <input id="search" placeholder="Buscar tabela ou coluna&hellip;" autocomplete="off" title="Enter = pr&oacute;ximo, Shift+Enter = anterior">
-      <span id="searchCount" class="hidden"></span>
-      <button id="searchPrev" class="search-nav hidden" title="Anterior (Shift+Enter)">‹</button>
-      <button id="searchNext" class="search-nav hidden" title="Pr&oacute;ximo (Enter)">›</button>
-    </div>
+    <div id="diffTabs"></div>
 
     <div class="sb-side sb-right">
       <button class="btn primary" id="btnSave" hidden>Salvar</button>
@@ -257,8 +283,6 @@
     </div>
   </div>
 
-  <div id="tabBar" class="hidden"></div>
-
   <div id="repoMenu" class="hidden">
     <div class="rm-title">Reposit&oacute;rios recentes</div>
     <div id="repoRecents"></div>
@@ -292,8 +316,12 @@
     <section id="diagramSection">
       <div id="diffPane" class="hidden">
         <div id="dpHead"><span>Diff do DBML</span><span class="spacer"></span>
+          <div id="dpModeToggle">
+            <button id="dpUnified" class="on">Unificado</button>
+            <button id="dpSplit">Lado a lado</button>
+          </div>
           <button class="btn sm" id="dpClose">&#10005;</button></div>
-        <pre id="dpPre"></pre>
+        <div id="dpBody"><pre id="dpPre"></pre></div>
       </div>
       <div id="editorPane" class="hidden">
         <div id="edHead"><span class="dot" id="edDot"></span><span id="edStatus">pronto</span>
@@ -355,6 +383,7 @@
         <select id="diffTarget" title="Branch alvo"></select>
       </div>
       <p class="set-hint dm-hint">Abre uma aba de compara&ccedil;&atilde;o no topo — d&aacute; pra manter v&aacute;rias abertas.</p>
+      <p class="dm-warn hidden" id="diffSameWarn">Escolha duas branches diferentes para comparar.</p>
       <div class="dm-actions">
         <button class="btn" id="diffCancel">Cancelar</button>
         <button class="btn primary" id="diffGo">Comparar</button>

@@ -262,32 +262,34 @@ function setDiffUi (on) {
 const activeDiffTab = () => (state.diffIdx != null ? state.diffTabs[state.diffIdx] : null)
 
 function renderTabBar () {
-  const bar = $('tabBar')
+  const bar = $('diffTabs')
   const hasTabs = state.diffTabs.length > 0
   document.body.classList.toggle('has-tabs', hasTabs)
   bar.classList.toggle('hidden', !hasTabs)
-  if (!hasTabs) { bar.innerHTML = ''; return }
   bar.innerHTML = ''
+  if (!hasTabs) return
+
+  const mkTab = (cls, title, inner, onClick) => {
+    const t = document.createElement('button')
+    t.className = 'vtab ' + cls
+    t.title = title
+    // orelhas curvas (estilo Chrome) via pseudo-elementos no CSS
+    t.innerHTML = `<span class="vt-in">${inner}</span>`
+    t.addEventListener('click', onClick)
+    bar.appendChild(t)
+  }
 
   // aba principal: a branch atual (visualização normal), sempre presente
-  const main = document.createElement('button')
-  main.className = 'vtab' + (state.diffIdx == null ? ' on' : '')
-  main.title = `Branch ${state.branch}`
-  main.innerHTML = `<span class="vt-dot live"></span><span class="vt-lbl">${escHtml(state.branch || '—')}</span>`
-  main.addEventListener('click', () => activateDiff(null))
-  bar.appendChild(main)
+  mkTab(state.diffIdx == null ? 'on' : '', `Branch ${state.branch}`,
+    `<span class="vt-dot live"></span><span class="vt-lbl">${escHtml(state.branch || '—')}</span>`,
+    () => activateDiff(null))
 
   // uma aba por comparação de diff
   state.diffTabs.forEach((t, i) => {
-    const tab = document.createElement('button')
-    tab.className = 'vtab diff' + (state.diffIdx === i ? ' on' : '')
-    tab.title = `Comparar ${t.base} → ${t.target}`
-    tab.innerHTML = `<span class="vt-dot"></span><span class="vt-lbl">${escHtml(t.base)} → ${escHtml(t.target)}</span><span class="vt-x" title="Fechar">✕</span>`
-    tab.addEventListener('click', e => {
-      if (e.target.closest('.vt-x')) { closeDiffTab(i); return }
-      activateDiff(i)
-    })
-    bar.appendChild(tab)
+    mkTab('diff' + (state.diffIdx === i ? ' on' : ''), `Comparar ${t.base} → ${t.target}`,
+      `<span class="vt-dot"></span><span class="vt-lbl">${escHtml(t.base)} → ${escHtml(t.target)}</span>` +
+      `<span class="vt-x" title="Fechar">✕</span>`,
+      e => { if (e.target.closest('.vt-x')) { closeDiffTab(i); return } activateDiff(i) })
   })
 }
 
@@ -303,21 +305,28 @@ function closeDiffTab (i) {
   state.diffTabs.splice(i, 1)
   if (wasActive) { activateDiff(null); return }
   if (state.diffIdx != null && state.diffIdx > i) state.diffIdx--
-  renderDiffTabs()
+  renderTabBar()
+}
+
+// botão Comparar desabilitado quando base === alvo (nada pra comparar)
+function refreshDiffGo () {
+  const same = $('diffBase').value === $('diffTarget').value
+  $('diffGo').disabled = same
+  $('diffSameWarn').classList.toggle('hidden', !same)
 }
 
 function openDiffModal () {
   const base = $('diffBase'), target = $('diffTarget')
   fillSelect(base, state.branches, base.value || (state.branches.includes('master') ? 'master' : state.branches[0]))
   fillSelect(target, state.branches, target.value || state.branch)
+  refreshDiffGo()
   $('diffModal').classList.remove('hidden')
 }
 function closeDiffModal () { $('diffModal').classList.add('hidden') }
 
 function confirmDiff () {
   const base = $('diffBase').value, target = $('diffTarget').value
-  if (!base || !target) return
-  if (base === target) { toast('escolha duas branches diferentes', 'warn'); return }
+  if (!base || !target || base === target) return
   closeDiffModal()
   const existing = state.diffTabs.findIndex(t => t.base === base && t.target === target)
   if (existing !== -1) { activateDiff(existing); return }
@@ -361,6 +370,9 @@ function updateDiffNav (d) {
     b.addEventListener('click', () => diagram.centerOnTable(b.dataset.t)))
 }
 
+let dpMode = 'unified' // 'unified' | 'split'
+let dpLastTxt = ''
+
 function renderDiffTextHtml (txt) {
   return txt.split('\n').map(l => {
     const cls = /^(\+\+\+|---)/.test(l) ? 'dh' : l[0] === '+' ? 'da' : l[0] === '-' ? 'dr' : l.startsWith('@@') ? 'dm' : ''
@@ -368,15 +380,50 @@ function renderDiffTextHtml (txt) {
   }).join('\n')
 }
 
+// lado a lado: emparelha blocos de removidas (esquerda) com adicionadas (direita);
+// contexto alinha nos dois lados; cabeçalhos de hunk (@@) marcam bloco
+function renderDiffTextSplit (txt) {
+  const rows = []
+  const pushPair = (delA, delB) => {
+    const n = Math.max(delA.length, delB.length)
+    for (let i = 0; i < n; i++) rows.push({ l: delA[i], r: delB[i], t: 'chg' })
+  }
+  let delA = [], delB = []
+  for (const raw of txt.split('\n')) {
+    if (/^(diff --git|index |\+\+\+|---)/.test(raw)) continue // ruído de cabeçalho do git
+    if (raw.startsWith('@@')) { pushPair(delA, delB); delA = []; delB = []; rows.push({ hunk: raw }); continue }
+    if (raw[0] === '-') { delA.push(raw.slice(1)); continue }
+    if (raw[0] === '+') { delB.push(raw.slice(1)); continue }
+    pushPair(delA, delB); delA = []; delB = []
+    rows.push({ l: raw.replace(/^ /, ''), r: raw.replace(/^ /, ''), t: 'ctx' })
+  }
+  pushPair(delA, delB)
+  const cell = (v, side) => {
+    if (v == null) return `<div class="sp-cell sp-empty"></div>`
+    return `<div class="sp-cell sp-${side}">${escHtml(v) || ' '}</div>`
+  }
+  return rows.map(r => {
+    if (r.hunk != null) return `<div class="sp-hunk">${escHtml(r.hunk)}</div>`
+    if (r.t === 'ctx') return `<div class="sp-row">${cell(r.l, 'ctx')}${cell(r.r, 'ctx')}</div>`
+    return `<div class="sp-row">${cell(r.l, r.l != null ? 'del' : 'x')}${cell(r.r, r.r != null ? 'add' : 'x')}</div>`
+  }).join('')
+}
+
+function paintDiffText () {
+  const pre = $('dpPre')
+  if (!dpLastTxt.trim()) { pre.textContent = '(sem diferenças no texto entre as branches)'; return }
+  if (dpMode === 'split') { pre.className = 'sp'; pre.innerHTML = renderDiffTextSplit(dpLastTxt) } else { pre.className = ''; pre.innerHTML = renderDiffTextHtml(dpLastTxt) }
+}
+
 async function loadDiffText () {
   const tabD = activeDiffTab()
   if (!tabD) return
   const pre = $('dpPre')
+  pre.className = ''
   pre.textContent = 'Carregando…'
   try {
-    const txt = await api.getDiffText(tabD.base, tabD.target)
-    if (txt.trim()) pre.innerHTML = renderDiffTextHtml(txt)
-    else pre.textContent = '(sem diferenças no texto entre as branches)'
+    dpLastTxt = await api.getDiffText(tabD.base, tabD.target)
+    paintDiffText()
   } catch (e) { pre.textContent = e.message || 'falha ao carregar o diff' }
 }
 
@@ -954,6 +1001,20 @@ function initRepoSwitcher () {
   }
 }
 
+// controles da janela frameless (barra de título) — só no Electron
+function initWindowControls () {
+  const d = window.gabbroDesktop
+  if (!d || !d.win) return
+  $('winCtrls').classList.remove('hidden')
+  document.body.classList.add('is-desktop')
+  $('winMin').addEventListener('click', () => d.win.minimize())
+  $('winMax').addEventListener('click', () => d.win.maximize())
+  $('winClose').addEventListener('click', () => d.win.close())
+  const setMaxIcon = m => { $('winMax').innerHTML = m ? '&#10064;' : '&#9633;'; $('winMax').title = m ? 'Restaurar' : 'Maximizar' }
+  d.win.isMaximized().then(setMaxIcon).catch(() => {})
+  d.win.onMaximizeChange(setMaxIcon)
+}
+
 function initDesktopUpdates () {
   if (!window.gabbroDesktop) return
   window.gabbroDesktop.onUpdateStatus(s => {
@@ -1035,6 +1096,7 @@ async function boot () {
   diagram.initDiagram({ parse: parseDBML })
   initDocs()
   initSettingsUi()
+  initWindowControls() // barra de título frameless (Electron)
   enhanceSelects() // dropdowns custom no tema do app (todos os <select>)
   hist.initHistory({ onOpenCommit: openHistoryCommit, onExit: exitHistory, fail })
   $('histExit').addEventListener('click', exitHistory)
@@ -1062,6 +1124,8 @@ async function boot () {
   $('diffModalClose').addEventListener('click', closeDiffModal)
   $('diffCancel').addEventListener('click', closeDiffModal)
   $('diffGo').addEventListener('click', confirmDiff)
+  $('diffBase').addEventListener('change', refreshDiffGo)
+  $('diffTarget').addEventListener('change', refreshDiffGo)
   $('diffModal').addEventListener('mousedown', e => { if (e.target === $('diffModal')) closeDiffModal() })
   $('btnDiffDim').addEventListener('click', () => {
     diffDim = !diffDim
@@ -1074,6 +1138,16 @@ async function boot () {
     $('btnDiffText').classList.toggle('on', diffPaneOpen)
     if (diffPaneOpen) loadDiffText()
   })
+  const setDpMode = m => {
+    dpMode = m
+    $('dpUnified').classList.toggle('on', m === 'unified')
+    $('dpSplit').classList.toggle('on', m === 'split')
+    try { localStorage.setItem('gabbro:diff-text-mode', m) } catch (e) { /* storage cheio */ }
+    paintDiffText()
+  }
+  setDpMode(localStorage.getItem('gabbro:diff-text-mode') === 'split' ? 'split' : 'unified')
+  $('dpUnified').addEventListener('click', () => setDpMode('unified'))
+  $('dpSplit').addEventListener('click', () => setDpMode('split'))
   $('dpClose').addEventListener('click', () => {
     diffPaneOpen = false
     $('diffPane').classList.add('hidden')
@@ -1096,11 +1170,20 @@ async function boot () {
     $('searchPrev').classList.toggle('hidden', !has || r.total < 2)
     $('searchNext').classList.toggle('hidden', !has || r.total < 2)
   }
-  // busca central (command palette): Ctrl+F foca; Esc limpa/desfoca
+  // busca recolhida (lupa) → expande ao clicar/Ctrl+F; recolhe vazia (blur/Esc)
+  const sw = $('searchWrap')
   const scope = () => $('searchScope').value
+  const openSearch = () => { sw.classList.add('open'); $('search').focus() }
+  const collapseSearch = () => { if (!$('search').value.trim()) sw.classList.remove('open') }
+  $('searchBtn').addEventListener('click', () => {
+    if (sw.classList.contains('open')) collapseSearch(); else openSearch()
+  })
+  sw.addEventListener('focusout', () => setTimeout(() => {
+    if (!sw.contains(document.activeElement)) collapseSearch()
+  }, 120))
   document.addEventListener('keydown', e => {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f' && state.tab === 'diagram') {
-      e.preventDefault(); $('search').focus(); $('search').select()
+      e.preventDefault(); openSearch(); $('search').select()
     }
   })
   $('search').addEventListener('keydown', e => {
@@ -1109,7 +1192,7 @@ async function boot () {
       if (!r.total) r = diagram.searchTable(e.target.value, scope())
       searchUi(r)
     } else if (e.key === 'Escape') {
-      if (!e.target.value) { e.target.blur(); return }
+      if (!e.target.value) { e.target.blur(); sw.classList.remove('open'); return }
       e.target.value = ''; diagram.searchTable(''); searchUi(null)
     }
   })

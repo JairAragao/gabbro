@@ -103,7 +103,11 @@ export function enhanceSelects (root = document) {
   root.querySelectorAll('select').forEach(enhance)
 }
 
-// fecha o menu aberto ao clicar fora, rolar ou apertar Esc
-document.addEventListener('mousedown', e => { if (!e.target.closest('.selui-menu')) closeOpen() })
+// fecha o menu aberto ao clicar fora, rolar ou apertar Esc.
+// captura (true): cliques em tabela/grupo do diagrama chamam stopPropagation,
+// então o listener precisa rodar ANTES do bubbling ser interrompido.
+document.addEventListener('mousedown', e => {
+  if (!e.target.closest('.selui-menu') && !e.target.closest('.selui-trigger')) closeOpen()
+}, true)
 window.addEventListener('resize', closeOpen)
-document.addEventListener('keydown', e => { if (e.key === 'Escape') closeOpen() })
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeOpen() }, true)
