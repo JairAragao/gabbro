@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.6.1 — 2026-07-23
+
+Acabamento de UI.
+
+- **Dropdowns no tema** — os `<select>` nativos (que abriam o menu do sistema, com
+  destaque azul) foram trocados por um dropdown custom no tema do app (menu verde). O
+  `<select>` real continua por baixo, funcional. Aplicado a todos os seletores.
+- **Abas de comparação de verdade** — as comparações de diff viraram uma barra de abas
+  própria abaixo do topo (estilo navegador): a aba da branch atual + uma aba `base → alvo`
+  por comparação, cada uma fechável. A barra só aparece quando há uma comparação aberta.
+- **Um botão Salvar** — "Salvar DBML" e "Salvar posições" viraram um só; o rótulo se adapta
+  (Salvar / Salvar posições / Salvar tudo) e commita o que estiver pendente.
+- **Diff mais legível** — a tabela removida deixa de ficar apagada e ganha borda e brilho
+  vermelhos (destaque simétrico ao verde da adicionada). Seleção de texto do editor passou
+  de azul para o verde do tema.
+- Fixes: flash branco na abertura e grade de fundo acompanhando o zoom (em vez de fixa em px
+  de tela).
+
 ## 0.6.0 — 2026-07-23
 
 Modo diff, organização do diagrama e chrome por modo.
