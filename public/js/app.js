@@ -4,6 +4,7 @@ import { diffModels, diffSummaryLine, buildUnionModel } from './diff.js'
 import * as diagram from './diagram.js'
 import { initDocs, renderDocs, scrollToTable } from './docs.js'
 import * as hist from './history.js'
+import { enhanceSelects } from './selectui.js'
 
 const $ = id => document.getElementById(id)
 
@@ -178,6 +179,7 @@ async function switchBranch (b) {
   // reativa a flag (e o botão Salvar), em vez de zerar incondicionalmente
   state.dbmlDirty = dirtyDbmlBranches().has(b)
   applyDraft(b)
+  if (state.diffTabs.length) renderTabBar() // a aba principal mostra a branch atual
   await renderAll({ fitView: true })
 }
 
@@ -244,26 +246,40 @@ function setDiffUi (on) {
   $('diffCtrls').classList.toggle('hidden', !on)
   document.body.classList.toggle('diff-on', on) // tema âmbar no modo diff
   if (!on) hideDiffTools()
-  renderDiffTabs()
+  renderTabBar()
 }
 
-/* ---------- abas de comparação (diff) no topo ---------- */
+/* ---------- barra de abas no topo (aba da branch + abas de comparação) ---------- */
 
 const activeDiffTab = () => (state.diffIdx != null ? state.diffTabs[state.diffIdx] : null)
 
-function renderDiffTabs () {
-  const wrap = $('diffTabs')
-  wrap.innerHTML = ''
+function renderTabBar () {
+  const bar = $('tabBar')
+  const hasTabs = state.diffTabs.length > 0
+  document.body.classList.toggle('has-tabs', hasTabs)
+  bar.classList.toggle('hidden', !hasTabs)
+  if (!hasTabs) { bar.innerHTML = ''; return }
+  bar.innerHTML = ''
+
+  // aba principal: a branch atual (visualização normal), sempre presente
+  const main = document.createElement('button')
+  main.className = 'vtab' + (state.diffIdx == null ? ' on' : '')
+  main.title = `Branch ${state.branch}`
+  main.innerHTML = `<span class="vt-dot live"></span><span class="vt-lbl">${escHtml(state.branch || '—')}</span>`
+  main.addEventListener('click', () => activateDiff(null))
+  bar.appendChild(main)
+
+  // uma aba por comparação de diff
   state.diffTabs.forEach((t, i) => {
-    const chip = document.createElement('button')
-    chip.className = 'diff-tab' + (state.diffIdx === i ? ' on' : '')
-    chip.title = `Comparar ${t.base} → ${t.target}`
-    chip.innerHTML = `<span class="dt-lbl">${escHtml(t.base)} → ${escHtml(t.target)}</span><span class="dt-x" title="Fechar">✕</span>`
-    chip.addEventListener('click', e => {
-      if (e.target.closest('.dt-x')) { closeDiffTab(i); return }
-      activateDiff(state.diffIdx === i ? null : i)
+    const tab = document.createElement('button')
+    tab.className = 'vtab diff' + (state.diffIdx === i ? ' on' : '')
+    tab.title = `Comparar ${t.base} → ${t.target}`
+    tab.innerHTML = `<span class="vt-dot"></span><span class="vt-lbl">${escHtml(t.base)} → ${escHtml(t.target)}</span><span class="vt-x" title="Fechar">✕</span>`
+    tab.addEventListener('click', e => {
+      if (e.target.closest('.vt-x')) { closeDiffTab(i); return }
+      activateDiff(i)
     })
-    wrap.appendChild(chip)
+    bar.appendChild(tab)
   })
 }
 
@@ -1005,6 +1021,7 @@ async function boot () {
   diagram.initDiagram({ parse: parseDBML })
   initDocs()
   initSettingsUi()
+  enhanceSelects() // dropdowns custom no tema do app (todos os <select>)
   hist.initHistory({ onOpenCommit: openHistoryCommit, onExit: exitHistory, fail })
   $('histExit').addEventListener('click', exitHistory)
 

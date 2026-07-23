@@ -218,8 +218,10 @@ circle.dot{fill:var(--edge)}circle.dot.hi{fill:var(--edgehi)}circle.dot.dim{opac
 
 /* ---------- diff decorations (diagram) ---------- */
 .tbl.diff-added{border-color:var(--added);box-shadow:0 0 0 2px #3ecf7c66,0 0 18px #3ecf7c40,0 5px 18px rgba(0,0,0,.38)}
-.tbl.diff-removed{opacity:.45;border:1px dashed var(--removed)}
-.tbl.diff-removed .tbl-hd{filter:grayscale(.5)}
+/* removida: destacada como a adicionada, mas em vermelho (não apagada) */
+.tbl.diff-removed{border-color:var(--removed);
+  box-shadow:0 0 0 2px #e5674f88,0 0 20px #e5674f4d,0 5px 18px rgba(0,0,0,.4)}
+.tbl.diff-removed .tbl-hd{background:#e5674f26!important;color:#f0a396!important}
 .diff-flag{font-size:10px;font-weight:800;padding:1px 6px;border-radius:4px;flex:none}
 .diff-flag.mod{background:var(--changed);color:#231a05}
 .col.diff-added{background:#3ecf7c26}
@@ -634,14 +636,6 @@ circle.mini-dot{fill:var(--accent)}
   background:#1b222dcc;border:1px solid #3a435688;border-radius:8px;padding:3px 10px;pointer-events:none}
 .meta-chip:empty{display:none}
 
-/* ---------- abas de comparação (diff) no topo ---------- */
-#diffTabs{display:flex;gap:2px}
-.diff-tab{display:inline-flex;align-items:center;gap:7px;background:transparent;border:0;
-  color:var(--muted);font-size:12px;font-weight:600;padding:5px 8px 5px 11px;border-radius:7px;cursor:pointer}
-.diff-tab:hover{background:var(--panel2);color:var(--text)}
-.diff-tab.on{background:#eac16a22;color:#ecd39a}
-.diff-tab .dt-x{opacity:.55;font-size:10px;padding:1px 4px;border-radius:4px}
-.diff-tab .dt-x:hover{opacity:1;background:#ffffff1c}
 
 /* tema âmbar sutil quando uma comparação está ativa */
 body.diff-on #toolbar{border-bottom-color:#8a6d2a;box-shadow:0 1px 0 #eac16a26}
@@ -664,3 +658,53 @@ body.mode-edit #tabs .tab[data-tab="docs"]{display:none}
 
 /* ---------- histórico dentro do modal de configurações ---------- */
 .sm-panel #histWrap{max-width:none;padding:0}
+
+/* ---------- dropdown custom (substitui o menu nativo do <select>) ---------- */
+.selui{position:relative;display:inline-flex}
+.selui-native{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;margin:0}
+.selui-trigger{display:inline-flex;align-items:center;gap:7px;background:var(--panel);
+  border:1px solid var(--border);color:var(--text);border-radius:8px;padding:6px 9px;
+  font-size:12.5px;cursor:pointer;max-width:170px;transition:.15s}
+.selui-trigger:hover{border-color:#455063;background:var(--panel2)}
+.selui-trigger.open{border-color:var(--accent)}
+.selui-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.selui-caret{display:flex;color:var(--muted);margin-left:auto;transition:transform .15s}
+.selui-trigger.open .selui-caret{transform:rotate(180deg);color:var(--accent)}
+.selui-menu{position:fixed;z-index:95;max-height:320px;overflow-y:auto;background:#1b222d;
+  border:1px solid #3a4356;border-radius:9px;padding:5px;box-shadow:0 12px 34px rgba(0,0,0,.55);
+  scrollbar-width:thin;scrollbar-color:#414e5f transparent}
+.selui-opt{display:block;width:100%;text-align:left;background:transparent;border:0;color:var(--text);
+  font-size:12.5px;padding:6px 10px;border-radius:6px;cursor:pointer;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis}
+.selui-opt:hover{background:#8fb3a01f;color:var(--accent)}
+.selui-opt.on{background:var(--accent);color:var(--accent-ink);font-weight:600}
+/* triggers dentro do modal/toolbar herdam a largura do contexto */
+.dm-body .selui{flex:1;min-width:0}
+.dm-body .selui-trigger{width:100%;max-width:none}
+#setSync .selui-trigger,#setUpdates .selui-trigger{min-width:210px;background:var(--panel2)}
+
+/* seleção de texto no editor: verde do tema, não o azul antigo */
+#code::selection{background:rgba(143,179,160,.30)}
+#code::-moz-selection{background:rgba(143,179,160,.30)}
+
+/* ---------- barra de abas (estilo navegador, tipo Basalt) ---------- */
+#tabBar{position:absolute;top:46px;left:0;right:0;height:36px;z-index:39;
+  display:flex;align-items:flex-end;gap:3px;padding:0 10px;
+  background:linear-gradient(180deg,#1a1f22,#161b1d);border-bottom:1px solid var(--border);
+  overflow-x:auto;scrollbar-width:none}
+#tabBar::-webkit-scrollbar{display:none}
+.vtab{display:inline-flex;align-items:center;gap:7px;flex-shrink:0;max-width:230px;
+  margin-bottom:-1px;padding:7px 12px;border:1px solid transparent;border-bottom:0;
+  border-radius:8px 8px 0 0;background:transparent;color:var(--muted);
+  font-size:12.5px;font-weight:600;cursor:pointer;transition:.12s}
+.vtab:hover{background:#ffffff0a;color:var(--text)}
+.vtab.on{background:var(--panel);border-color:var(--border);color:var(--text)}
+.vtab.diff.on{border-color:#8a6d2a;background:#eac16a12;color:#ecd39a}
+.vtab .vt-dot{width:7px;height:7px;border-radius:50%;flex:none;background:#6f7b8a}
+.vtab .vt-dot.live{background:#3ecf7c}
+.vtab.diff .vt-dot{background:#eac16a}
+.vtab .vt-lbl{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vtab .vt-x{display:flex;opacity:.5;font-size:10px;padding:2px 4px;border-radius:4px;margin-left:2px}
+.vtab .vt-x:hover{opacity:1;background:#ffffff1c}
+body.has-tabs #main{top:82px}
+body.has-tabs #banners{top:88px}
