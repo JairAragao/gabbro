@@ -77,108 +77,135 @@ function computeLayout () {
     cursorX += cw + GRP_PAD * 2 + 60; rowMaxH = Math.max(rowMaxH, ch + GRP_PAD * 2)
   }
 }
-/* ---------- auto-organização (estilo dbdiagram) ---------- */
+/* ---------- auto-organização (estilo dbdiagram, POR GRUPOS) ----------
+ * Regra: tabelas nunca saem do seu grupo — cada grupo vira um bloco compacto
+ * (mesma mecânica do layout padrão) e os ALGORITMOS posicionam os blocos.
+ * Assim as caixas de grupo continuam íntegras. */
 
-// Esquerda → direita: camadas pela direção dos FKs (tabela referenciada fica
-// à esquerda de quem a referencia). Dentro da camada, ordena pelo barycenter
-// dos pais já posicionados pra reduzir cruzamentos; camada alta quebra em
-// sub-colunas.
+// cada grupo → bloco compacto {name, members, cells[{t,dx,dy}], w, h};
+// não-agrupadas viram um bloco próprio no fim
+function groupBlocks () {
+  const blocks = []
+  const seen = new Set()
+  const mk = (name, members) => {
+    if (!members.length) return
+    const MAX_COL_H = 1500
+    let subX = 0, colY = 0, w = 0, h = 0
+    const cells = []
+    for (const nm of members) {
+      const th = tableHeight(model.tables[nm])
+      if (colY > 0 && colY + th > MAX_COL_H) { subX += TABLE_W + GAP; colY = 0 }
+      cells.push({ t: nm, dx: subX, dy: colY })
+      colY += th + GAP
+      w = Math.max(w, subX + TABLE_W)
+      h = Math.max(h, colY - GAP)
+    }
+    blocks.push({ name, members: new Set(members), cells, w, h })
+  }
+  for (const g of model.groups) {
+    const mem = g.tables.filter(t => model.tables[t] && !seen.has(t))
+    mem.forEach(t => seen.add(t))
+    mk(g.name, mem)
+  }
+  mk('__ungrouped__', model.order.filter(t => !seen.has(t)))
+  return blocks
+}
+
+// Esquerda → direita: camadas de GRUPOS pela direção dos FKs entre grupos
+// (grupo referenciado fica à esquerda de quem o referencia).
 function layoutLeftRight () {
-  const layer = {}
-  model.order.forEach(t => { layer[t] = 0 })
-  for (let i = 0; i < 16; i++) {
+  const blocks = groupBlocks()
+  const idxOf = new Map()
+  blocks.forEach((b, i) => b.members.forEach(t => idxOf.set(t, i)))
+  const layer = blocks.map(() => 0)
+  for (let it = 0; it < 20; it++) {
     let changed = false
     for (const t of model.order) {
+      const i = idxOf.get(t)
       for (const c of model.tables[t].columns) {
-        if (c.fk && model.tables[c.fk.table] && c.fk.table !== t) {
-          const need = layer[c.fk.table] + 1
-          if (layer[t] < need && need < 60) { layer[t] = need; changed = true }
-        }
+        if (!c.fk || !model.tables[c.fk.table]) continue
+        const j = idxOf.get(c.fk.table)
+        if (i === j) continue
+        const need = layer[j] + 1
+        if (layer[i] < need && need < 40) { layer[i] = need; changed = true }
       }
     }
     if (!changed) break
   }
-  const byLayer = new Map()
-  for (const t of model.order) {
-    if (!byLayer.has(layer[t])) byLayer.set(layer[t], [])
-    byLayer.get(layer[t]).push(t)
-  }
   positions = {}
-  const MAXH = 2600
-  let baseX = 0
+  const byLayer = new Map()
+  blocks.forEach((b, i) => {
+    if (!byLayer.has(layer[i])) byLayer.set(layer[i], [])
+    byLayer.get(layer[i]).push(b)
+  })
+  let x = 0
   for (const l of [...byLayer.keys()].sort((a, b) => a - b)) {
     const list = byLayer.get(l)
-    const bary = t => {
-      const ys = []
-      for (const c of model.tables[t].columns) {
-        if (c.fk && positions[c.fk.table]) ys.push(positions[c.fk.table].y)
-      }
-      return ys.length ? ys.reduce((s, v) => s + v, 0) / ys.length : 0
+    list.sort((a, b) => b.h - a.h)
+    let y = 0, bandW = 0
+    for (const b of list) {
+      for (const cell of b.cells) positions[cell.t] = { x: x + cell.dx, y: y + cell.dy }
+      y += b.h + GRP_PAD * 2 + 90
+      bandW = Math.max(bandW, b.w)
     }
-    list.sort((a, b) => bary(a) - bary(b) || a.localeCompare(b))
-    let subX = baseX, y = 0
-    for (const t of list) {
-      const h = tableHeight(model.tables[t])
-      if (y > 0 && y + h > MAXH) { subX += TABLE_W + GAP; y = 0 }
-      positions[t] = { x: subX, y }
-      y += h + GAP
-    }
-    baseX = subX + TABLE_W + 130
+    x += bandW + GRP_PAD * 2 + 140
   }
 }
 
-// Floco de neve: tabela mais conectada da componente no centro, vizinhas em
-// anéis concêntricos (BFS). Componentes lado a lado; isoladas em grade no fim.
+// Floco de neve: o GRUPO mais conectado no centro; os demais grupos ao redor,
+// os com mais vínculos com o centro mais perto (espiral com colisão).
 function layoutSnowflake () {
-  const adj = new Map(model.order.map(t => [t, new Set()]))
-  for (const t of model.order) {
-    for (const c of model.tables[t].columns) {
-      if (c.fk && model.tables[c.fk.table] && c.fk.table !== t) {
-        adj.get(t).add(c.fk.table); adj.get(c.fk.table).add(t)
-      }
-    }
-  }
+  const blocks = groupBlocks()
   positions = {}
-  const isolated = model.order.filter(t => !adj.get(t).size)
-  const unplaced = new Set(model.order.filter(t => adj.get(t).size))
-  let cx = 0, maxBottom = 0
-  while (unplaced.size) {
-    let hub = null
-    for (const t of unplaced) if (!hub || adj.get(t).size > adj.get(hub).size) hub = t
-    const rings = [[hub]]
-    unplaced.delete(hub)
-    const seen = new Set([hub])
-    for (;;) {
-      const next = []
-      for (const t of rings[rings.length - 1]) {
-        for (const n of adj.get(t)) if (!seen.has(n) && unplaced.delete(n)) { seen.add(n); next.push(n) }
-      }
-      if (!next.length) break
-      rings.push(next)
+  if (!blocks.length) return
+  const idxOf = new Map()
+  blocks.forEach((b, i) => b.members.forEach(t => idxOf.set(t, i)))
+  const weight = blocks.map(() => 0)
+  const linkCount = new Map()
+  for (const t of model.order) {
+    const i = idxOf.get(t)
+    for (const c of model.tables[t].columns) {
+      if (!c.fk || !model.tables[c.fk.table]) continue
+      const j = idxOf.get(c.fk.table)
+      if (i === j) continue
+      weight[i]++; weight[j]++
+      const k = Math.min(i, j) + ':' + Math.max(i, j)
+      linkCount.set(k, (linkCount.get(k) || 0) + 1)
     }
-    let maxR = 0
-    rings.forEach((ring, r) => {
-      if (r === 0) { positions[hub] = { x: cx, y: 0 }; return }
-      // raio mínimo pra circunferência comportar as alturas do anel
-      const need = ring.reduce((s, t) => s + tableHeight(model.tables[t]) + GAP, 0) / (2 * Math.PI) * 1.7
-      const R = Math.max(r * (TABLE_W + 160), need)
-      maxR = Math.max(maxR, R)
-      ring.forEach((t, i) => {
-        const ang = (i / ring.length) * 2 * Math.PI + (r % 2 ? 0.4 : 0)
-        positions[t] = { x: cx + Math.cos(ang) * R, y: Math.sin(ang) * R * 0.75 }
-        maxBottom = Math.max(maxBottom, positions[t].y + tableHeight(model.tables[t]))
-      })
-    })
-    cx += maxR * 2 + TABLE_W + 300
   }
-  // isoladas: grade compacta abaixo de tudo
-  let x = 0, y = maxBottom + 200, rowH = 0
-  for (const t of isolated) {
-    const h = tableHeight(model.tables[t])
-    positions[t] = { x, y }
-    x += TABLE_W + GAP; rowH = Math.max(rowH, h)
-    if (x > 5200) { x = 0; y += rowH + GAP; rowH = 0 }
+  let hub = 0
+  weight.forEach((w, i) => { if (w > weight[hub]) hub = i })
+
+  const placedRects = []
+  const MARGIN = GRP_PAD * 2 + 100
+  const place = (b, x, y) => {
+    for (const cell of b.cells) positions[cell.t] = { x: x + cell.dx, y: y + cell.dy }
+    placedRects.push({ x1: x - MARGIN / 2, y1: y - MARGIN / 2, x2: x + b.w + MARGIN / 2, y2: y + b.h + MARGIN / 2 })
   }
+  const hubB = blocks[hub]
+  place(hubB, -hubB.w / 2, -hubB.h / 2)
+
+  const rest = blocks.map((b, i) => ({ b, i })).filter(o => o.i !== hub)
+  const linkToHub = o => linkCount.get(Math.min(o.i, hub) + ':' + Math.max(o.i, hub)) || 0
+  rest.sort((a, b) => linkToHub(b) - linkToHub(a) || weight[b.i] - weight[a.i])
+
+  const GOLD = 2.399963 // ângulo áureo espalha as direções
+  rest.forEach((o, k) => {
+    const b = o.b
+    const baseAng = k * GOLD
+    let done = false
+    for (let r = Math.max(hubB.w, hubB.h) / 2 + 220; !done && r < 60000; r += 90) {
+      for (let a = 0; a < 12 && !done; a++) {
+        const ang = baseAng + a * (Math.PI / 6)
+        const cx = Math.cos(ang) * r - b.w / 2
+        const cy = Math.sin(ang) * r * 0.8 - b.h / 2
+        const rect = { x1: cx - MARGIN / 2, y1: cy - MARGIN / 2, x2: cx + b.w + MARGIN / 2, y2: cy + b.h + MARGIN / 2 }
+        const hit = placedRects.some(p => rect.x1 < p.x2 && rect.x2 > p.x1 && rect.y1 < p.y2 && rect.y2 > p.y1)
+        if (!hit) { place(b, cx, cy); done = true }
+      }
+    }
+    if (!done) place(b, 0, (placedRects[placedRects.length - 1] || { y2: 0 }).y2 + 200)
+  })
 }
 
 // algo: 'leftright' | 'snowflake' | 'compact' (compact = layout padrão por grupos)
@@ -1115,6 +1142,15 @@ function centerOn (m) {
     const row = idx >= 0 && tableEls[name].querySelectorAll('.col')[idx]
     if (row) { row.classList.add('find-flash'); setTimeout(() => row.classList.remove('find-flash'), 1600) }
   }
+}
+
+// navegador de mudanças do modo diff: pula até a tabela
+export function centerOnTable (name) {
+  if (model && model.tables[name]) centerOn({ t: name, c: null })
+}
+// escurece o que NÃO mudou (classes diff-added/removed/modified ficam vivas)
+export function setDiffDim (on) {
+  if (world) world.classList.toggle('diff-dim', !!on)
 }
 
 export function searchTable (q, scope = 'all') {
