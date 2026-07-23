@@ -113,10 +113,18 @@ function updateChrome () {
   diagram.setDraggable(canEdit())
 
   const ok = canEdit()
-  $('btnSaveDbml').hidden = !editing || state.config.readOnly
-  $('btnSavePos').hidden = !editing || state.config.readOnly
-  $('btnSaveDbml').disabled = !ok || !state.dbmlDirty
-  $('btnSavePos').disabled = !ok || !state.posDirty
+  const save = $('btnSave')
+  const nDirty = (state.dbmlDirty ? 1 : 0) + (state.posDirty ? 1 : 0)
+  save.hidden = !editing || state.config.readOnly
+  save.disabled = !ok || !nDirty
+  // o rótulo diz o que será salvo (schema, posições ou ambos)
+  save.textContent = state.dbmlDirty && state.posDirty ? 'Salvar tudo'
+    : state.posDirty && !state.dbmlDirty ? 'Salvar posições'
+      : 'Salvar'
+  save.title = state.dbmlDirty && state.posDirty ? 'Commita o schema e as posições'
+    : state.dbmlDirty ? 'Commita o schema (DBML)'
+      : state.posDirty ? 'Commita as posições das tabelas'
+        : 'Nada para salvar'
 
   const banner = $('banner')
   if (editing && state.branch !== editableBranch()) {
@@ -428,9 +436,8 @@ async function saveDbml () {
     try { prefill = diffSummaryLine(diffModels(base.model, parseDBML(text))) } catch (e) { /* parse error — no prefill */ }
   }
   const message = window.prompt('Mensagem do commit (opcional):', prefill)
-  if (message === null) return
-  const btn = $('btnSaveDbml')
-  btn.disabled = true
+  if (message === null) return false
+  $('btnSave').disabled = true
   try {
     const res = await api.putDbml(text, message, isLocal() ? state.branch : undefined)
     const entry = { text, model: parseDBML(text) }
@@ -441,14 +448,14 @@ async function saveDbml () {
     toast(`DBML commitado em ${res.branch} (${String(res.commit).slice(0, 7)})`)
     warnToast(res.warning)
     refreshSyncBadge()
-  } catch (e) { saveFail(e) }
+    return true
+  } catch (e) { saveFail(e); return false }
 }
 
 let posSaveInFlight = false
 async function savePositions () {
   if (!canEdit() || posSaveInFlight) return
-  const btn = $('btnSavePos')
-  btn.disabled = true
+  $('btnSave').disabled = true
   posSaveInFlight = true
   try {
     Object.assign(state.positions.tables, diagram.getDirtyPositions().tables)
@@ -461,6 +468,13 @@ async function savePositions () {
     warnToast(res.warning)
     refreshSyncBadge()
   } catch (e) { saveFail(e) } finally { posSaveInFlight = false }
+}
+
+// botão único: commita o que estiver sujo (schema e/ou posições)
+async function saveAll () {
+  if (!canEdit()) return
+  if (state.dbmlDirty) { const ok = await saveDbml(); if (!ok) return }
+  if (state.posDirty) await savePositions()
 }
 
 /* ---------- salvamento automático de posições (configurável) ---------- */
@@ -1074,8 +1088,7 @@ async function boot () {
     if (entry) diagram.setEditorText(entry.text)
     updateChrome()
   })
-  $('btnSaveDbml').addEventListener('click', saveDbml)
-  $('btnSavePos').addEventListener('click', savePositions)
+  $('btnSave').addEventListener('click', saveAll)
   const searchUi = r => {
     const has = r && r.total > 0
     $('searchCount').textContent = has ? `${r.idx + 1}/${r.total}` : ($('search').value.trim() ? '0' : '')
