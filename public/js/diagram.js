@@ -689,6 +689,172 @@ function reparseFromEditor () {
     if (dbmlEditedCb) dbmlEditedCb(m, txt)
   } catch (err) { $('edDot').classList.add('err'); $('edStatus').textContent = 'erro de sintaxe' }
 }
+/* ---------- atalhos estilo VS Code no editor (textarea) ----------
+ * Sem multi-cursor (limite de textarea): Ctrl+D seleciona a palavra e, com
+ * seleção, pula pra próxima ocorrência (com wrap). Edições via execCommand
+ * pra preservar o undo nativo (fallback setRangeText + input sintético). */
+function initEditorKeys () {
+  const val = () => code.value
+  const lineStartAt = (text, i) => text.lastIndexOf('\n', i - 1) + 1
+  const lineEndAt = (text, i) => { const e = text.indexOf('\n', i); return e === -1 ? text.length : e }
+  const lineH = () => parseFloat(getComputedStyle(code).lineHeight) || 18
+
+  function replaceRange (start, end, text, selS, selE) {
+    code.setSelectionRange(start, end)
+    let ok = false
+    try { ok = document.execCommand('insertText', false, text) } catch (err) { ok = false }
+    if (!ok) {
+      code.setRangeText(text, start, end, 'end')
+      code.dispatchEvent(new Event('input', { bubbles: true }))
+    }
+    if (selS != null) code.setSelectionRange(selS, selE == null ? selS : selE)
+  }
+
+  // bloco de linhas inteiras coberto pela seleção (fim em \n não puxa a linha seguinte)
+  function block () {
+    const text = val()
+    const s0 = code.selectionStart
+    let e0 = code.selectionEnd
+    if (e0 > s0 && text[e0 - 1] === '\n') e0--
+    return { s: lineStartAt(text, s0), e: lineEndAt(text, e0) }
+  }
+
+  function scrollToPos (i) {
+    const line = val().slice(0, i).split('\n').length
+    const lh = lineH()
+    const top = (line - 1) * lh
+    if (top < code.scrollTop || top > code.scrollTop + code.clientHeight - 2 * lh) {
+      code.scrollTop = Math.max(0, top - code.clientHeight / 2)
+    }
+    syncScroll()
+  }
+
+  function selectNext () {
+    const text = val()
+    const s = code.selectionStart, e = code.selectionEnd
+    if (s === e) {
+      let a = s, b = s
+      while (a > 0 && /\w/.test(text[a - 1])) a--
+      while (b < text.length && /\w/.test(text[b])) b++
+      if (a < b) code.setSelectionRange(a, b)
+      return
+    }
+    const q = text.slice(s, e)
+    if (!q) return
+    let idx = text.indexOf(q, e)
+    if (idx === -1) idx = text.indexOf(q) // wrap
+    if (idx === -1 || idx === s) return
+    code.setSelectionRange(idx, idx + q.length)
+    scrollToPos(idx)
+  }
+
+  function toggleComment () {
+    const text = val()
+    const { s, e } = block()
+    const lines = text.slice(s, e).split('\n')
+    const content = lines.filter(l => l.trim())
+    const allCommented = content.length > 0 && content.every(l => /^\s*\/\//.test(l))
+    const out = lines.map(l => {
+      if (!l.trim()) return l
+      return allCommented ? l.replace(/^(\s*)\/\/ ?/, '$1') : l.replace(/^(\s*)/, '$1// ')
+    }).join('\n')
+    replaceRange(s, e, out, s, s + out.length)
+  }
+
+  function moveLines (down) {
+    const text = val()
+    const { s, e } = block()
+    const blockTxt = text.slice(s, e)
+    if (down) {
+      if (e >= text.length) return
+      const nextEnd = lineEndAt(text, e + 1)
+      const nextTxt = text.slice(e + 1, nextEnd)
+      const ns = s + nextTxt.length + 1
+      replaceRange(s, nextEnd, nextTxt + '\n' + blockTxt, ns, ns + blockTxt.length)
+    } else {
+      if (s === 0) return
+      const prevStart = lineStartAt(text, s - 1)
+      const prevTxt = text.slice(prevStart, s - 1)
+      replaceRange(prevStart, e, blockTxt + '\n' + prevTxt, prevStart, prevStart + blockTxt.length)
+    }
+  }
+
+  function dupLines (down) {
+    const text = val()
+    const { s, e } = block()
+    const blockTxt = text.slice(s, e)
+    if (down) replaceRange(e, e, '\n' + blockTxt, e + 1, e + 1 + blockTxt.length)
+    else replaceRange(s, s, blockTxt + '\n', s, s + blockTxt.length)
+  }
+
+  function deleteLines () {
+    const text = val()
+    const { s, e } = block()
+    const end = e < text.length ? e + 1 : e
+    const start = end === e && s > 0 ? s - 1 : s // última linha: consome o \n anterior
+    replaceRange(start, end, '', Math.min(start, val().length))
+  }
+
+  function selectLine () {
+    const text = val()
+    const { s, e } = block()
+    code.setSelectionRange(s, e < text.length ? e + 1 : e)
+  }
+
+  function indent (outdent) {
+    const text = val()
+    const s0 = code.selectionStart, e0 = code.selectionEnd
+    if (!outdent && !text.slice(s0, e0).includes('\n')) { replaceRange(s0, e0, '  '); return }
+    const { s, e } = block()
+    const lines = text.slice(s, e).split('\n')
+    const out = lines.map(l => outdent ? l.replace(/^ {1,2}/, '') : (l.trim() ? '  ' + l : l)).join('\n')
+    replaceRange(s, e, out, s, s + out.length)
+  }
+
+  function autoIndentEnter (ev) {
+    const text = val()
+    const s = code.selectionStart
+    if (s !== code.selectionEnd) return // seleção: enter padrão substitui
+    const ls = lineStartAt(text, s)
+    const ind = (text.slice(ls, s).match(/^\s*/) || [''])[0]
+    const extra = /\{\s*$/.test(text.slice(ls, s)) ? '  ' : ''
+    if (!ind && !extra) return
+    ev.preventDefault()
+    replaceRange(s, s, '\n' + ind + extra)
+  }
+
+  function insertLine (above) {
+    const text = val()
+    const cur = code.selectionStart
+    const ind = (text.slice(lineStartAt(text, cur), cur).match(/^\s*/) || [''])[0]
+    if (above) {
+      const ls = lineStartAt(text, cur)
+      replaceRange(ls, ls, ind + '\n', ls + ind.length)
+    } else {
+      const le = lineEndAt(text, code.selectionEnd)
+      replaceRange(le, le, '\n' + ind, le + 1 + ind.length)
+    }
+  }
+
+  code.addEventListener('keydown', e => {
+    const ctrl = e.ctrlKey || e.metaKey
+    const k = e.key.toLowerCase()
+    if (ctrl && !e.shiftKey && !e.altKey && k === 'd') { e.preventDefault(); selectNext(); return }
+    if (ctrl && k === '/') { e.preventDefault(); toggleComment(); return }
+    if (e.altKey && !ctrl && (k === 'arrowup' || k === 'arrowdown')) {
+      e.preventDefault()
+      if (e.shiftKey) dupLines(k === 'arrowdown')
+      else moveLines(k === 'arrowdown')
+      return
+    }
+    if (ctrl && e.shiftKey && k === 'k') { e.preventDefault(); deleteLines(); return }
+    if (ctrl && !e.shiftKey && k === 'l') { e.preventDefault(); selectLine(); return }
+    if (k === 'tab') { e.preventDefault(); indent(e.shiftKey); return }
+    if (ctrl && k === 'enter') { e.preventDefault(); insertLine(e.shiftKey); return }
+    if (k === 'enter' && !ctrl && !e.shiftKey && !e.altKey) autoIndentEnter(e)
+  })
+}
+
 function selectTableInEditor (name) {
   const t = model.tables[name]; if (!t) return
   if ($('editorPane').classList.contains('hidden')) return
@@ -812,6 +978,10 @@ export function initDiagram (opts) {
 
   code.addEventListener('scroll', syncScroll)
   code.addEventListener('input', onCodeInput)
+  initEditorKeys()
+  $('edHead').title = 'Atalhos: Ctrl+D próxima ocorrência · Ctrl+/ comentar · Alt+↑↓ mover linha · ' +
+    'Shift+Alt+↑↓ duplicar · Ctrl+Shift+K excluir linha · Ctrl+L selecionar linha · ' +
+    'Tab/Shift+Tab indentar · Ctrl+Enter linha abaixo/acima'
 
   ;(function splitter () {
     let dragging = false; const sp = $('splitter')
