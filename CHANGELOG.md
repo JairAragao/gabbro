@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.5.0 — 2026-07-23
+
+Interface em português, configurações completas e modo doc turbinado.
+
+- **UI 100% pt-BR** — app, CLI, splash, erros do servidor e prefill de commit. Mensagens
+  do git fixadas em inglês internamente (`LC_ALL=C`) pra classificação de erro estável.
+- **Modal de Configurações** com 4 abas: Geral (salvamento automático de posições com
+  intervalo configurável), Sincronização (auto-sync com estratégia de conflito
+  rebase/só-fast-forward/perguntar + painel de saúde do git), Histórico (todos os commits
+  do repo) e Atualizações (status, verificação manual, intervalo configurável — inclusive
+  "Desligado" valendo no boot — e changelog embutido).
+- **Modo doc**: filtro por grupo e por tabela, coluna própria pra comentários, atributos
+  antes do nome, painéis visuais de índices/referências e **mini-diagrama de
+  relacionamentos** que espelha as posições do diagrama principal, com tabelas inteiras
+  ou só vínculos e arestas 90° roteadas pelo mesmo A* do diagrama.
+- **Diagrama**: marcadores PK/FK/U antes do nome (estilo StarUML), auto-organização
+  (esquerda→direita, floco de neve, compacto), grade de fundo desligável, toolbar com a
+  identidade mineral, ctrl+scroll = zoom / scroll = rolagem / botão do meio = pan.
+- **Editor DBML**: atalhos estilo VS Code (Ctrl+D próxima ocorrência, Ctrl+/, Alt+setas,
+  Shift+Alt+setas, Ctrl+Shift+K, Ctrl+L, Tab/Shift+Tab, Enter com auto-indentação).
+- **Robustez**: edição de DBML não salva sobrevive a Sincronizar/atualizar/trocar de
+  branch; 28 correções de duas rodadas de revisão (âncoras de seta, preferências que
+  sumiam ao salvar posições, avisos de push obsoletos, clipping no mini-diagrama e mais).
+
 ## 0.4.0 — 2026-07-23
 
 Identidade visual e boot sem fricção.
