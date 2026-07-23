@@ -145,11 +145,11 @@ html,body{margin:0;height:100%;background:var(--chrome);color:var(--text);overfl
 #editorPane.hidden + #splitter{display:none}
 
 /* ---------- viewport / diagram ---------- */
+/* grade de pontos (estilo dbdiagram) sobre fundo chapado */
 #viewport{flex:1;position:relative;overflow:hidden;cursor:grab;
   background:
-    linear-gradient(var(--grid) 1px,transparent 1px) 0 0/28px 28px,
-    linear-gradient(90deg,var(--grid) 1px,transparent 1px) 0 0/28px 28px,
-    radial-gradient(circle at 50% 35%, #313a4a, #272f3c 72%)}
+    radial-gradient(circle, #ffffff24 1.2px, transparent 1.7px) 0 0/24px 24px,
+    #272d36}
 #viewport.grabbing{cursor:grabbing}
 /* no will-change: the world spans thousands of px — caching it as one GPU layer
    overflows texture limits at zoom and makes tiles flicker/disappear */
@@ -549,7 +549,7 @@ path.mini-edge{fill:none;stroke:var(--accent);stroke-width:1.8;opacity:.75}
 circle.mini-dot{fill:var(--accent)}
 
 /* ---------- grade de fundo desligável ---------- */
-#viewport.no-grid{background:radial-gradient(circle at 50% 35%, #313a4a, #272f3c 72%)}
+#viewport.no-grid{background:#272d36}
 
 /* ---------- menu de auto-organização ---------- */
 #arrangeMenu{position:absolute;right:14px;bottom:62px;z-index:35;width:300px;background:#1b222d;
