@@ -228,7 +228,7 @@ function setTab (tab) {
   document.querySelectorAll('#tabs .tab').forEach(el => el.classList.toggle('on', el.dataset.tab === tab))
   $('diagramSection').classList.toggle('hidden', tab !== 'diagram')
   $('docsSection').classList.toggle('hidden', tab !== 'docs')
-  $('searchWrap').classList.toggle('hidden', tab !== 'diagram')
+  document.body.classList.toggle('tab-diagram', tab === 'diagram') // busca central só no diagrama
   updateChrome()
 }
 
@@ -1096,26 +1096,20 @@ async function boot () {
     $('searchPrev').classList.toggle('hidden', !has || r.total < 2)
     $('searchNext').classList.toggle('hidden', !has || r.total < 2)
   }
-  // busca recolhida por padrão: só a lupa; expande ao clicar, recolhe vazia
-  const sw = $('searchWrap')
-  const collapseSearch = () => { sw.classList.remove('open') }
-  $('searchBtn').addEventListener('click', () => {
-    sw.classList.toggle('open')
-    if (sw.classList.contains('open')) $('search').focus()
-  })
-  sw.addEventListener('focusout', () => {
-    setTimeout(() => {
-      if (!sw.contains(document.activeElement) && !$('search').value.trim()) collapseSearch()
-    }, 120)
-  })
+  // busca central (command palette): Ctrl+F foca; Esc limpa/desfoca
   const scope = () => $('searchScope').value
+  document.addEventListener('keydown', e => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f' && state.tab === 'diagram') {
+      e.preventDefault(); $('search').focus(); $('search').select()
+    }
+  })
   $('search').addEventListener('keydown', e => {
     if (e.key === 'Enter') {
       let r = diagram.searchStep(e.shiftKey ? -1 : 1)
       if (!r.total) r = diagram.searchTable(e.target.value, scope())
       searchUi(r)
     } else if (e.key === 'Escape') {
-      if (!e.target.value) { collapseSearch(); e.target.blur(); return }
+      if (!e.target.value) { e.target.blur(); return }
       e.target.value = ''; diagram.searchTable(''); searchUi(null)
     }
   })

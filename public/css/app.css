@@ -15,14 +15,43 @@ html,body{margin:0;height:100%;background:var(--chrome);color:var(--text);overfl
 .hidden{display:none!important}
 .spacer{flex:1}
 
-/* ---------- toolbar — identidade mineral do Gabbro (carvão facetado + verde) ---------- */
+/* ---------- barra principal: identidade + repo | modo (centro) ---------- */
 #toolbar{height:46px;display:flex;align-items:center;gap:10px;padding:0 12px;
   background:linear-gradient(115deg,#23292c 0%,#1c2124 34%,#22282a 35%,#171c1e 68%,#1e2427 69%,#14181a 100%);
-  border-bottom:1px solid #34423a;box-shadow:0 1px 0 #8fb3a01a;position:relative;z-index:40}
+  border-bottom:1px solid #34423a;box-shadow:0 1px 0 #8fb3a01a;position:relative;z-index:41}
+.tb-side{flex:1;display:flex;align-items:center;gap:10px;min-width:0}
+.tb-right{justify-content:flex-end}
 #toolbar .logo{font-weight:800;font-size:15px;letter-spacing:.3px;color:var(--accent);
   text-shadow:0 0 14px rgba(143,179,160,.35)}
 #toolbar .logo-mark{width:26px;height:26px;flex:none;display:block;
   filter:drop-shadow(0 0 6px rgba(143,179,160,.3))}
+
+/* ---------- segunda barra: abas + branch | busca (centro) | ações ---------- */
+#subbar{height:40px;display:flex;align-items:center;gap:10px;padding:0 12px;position:absolute;
+  top:46px;left:0;right:0;z-index:40;background:linear-gradient(180deg,#1c2124,#171b1e);
+  border-bottom:1px solid var(--border)}
+.sb-side{flex:1;display:flex;align-items:center;gap:8px;min-width:0}
+.sb-right{justify-content:flex-end}
+.sb-sep{width:1px;height:22px;background:var(--border);flex:none;margin:0 3px}
+/* busca centralizada estilo command palette (só no modo diagrama) */
+#searchWrap{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  display:flex;align-items:center;gap:4px;background:var(--panel);border:1px solid var(--border);
+  border-radius:9px;padding:2px 4px 2px 9px;width:min(420px,38vw);z-index:1}
+#searchWrap:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px #8fb3a01f}
+#searchWrap .search-ico{display:flex;color:var(--muted);flex:none}
+#search{flex:1;background:transparent;border:0;color:var(--text);padding:6px 4px;font-size:12.5px;
+  outline:none;min-width:0;width:auto}
+body:not(.tab-diagram) #searchWrap{display:none}
+.btn.icon{padding:6px;width:32px;justify-content:center}
+.btn.icon svg{display:block}
+
+/* modo edição: verde mais vivo + realce nas barras pra deixar claro o estado */
+body.mode-edit{--accent:#7ed3a6;--accent-ink:#08160e}
+body.mode-edit #toolbar{border-bottom-color:#2f6b4e;box-shadow:0 1px 0 #7ed3a626}
+body.mode-edit #subbar{border-bottom-color:#2f6b4e;background:linear-gradient(180deg,#18211c,#141b17)}
+body.mode-edit #modeToggle{box-shadow:0 0 0 1px #7ed3a64d}
+/* Organizar só faz sentido editando (move tabelas) */
+body:not(.mode-edit) #btnArrange{display:none}
 #toolbar .meta{color:var(--muted);font-size:12px;white-space:nowrap}
 .btn{background:var(--panel2);border:1px solid var(--border);color:var(--text);border-radius:8px;
   padding:6px 11px;font-size:12.5px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;transition:.15s}
@@ -59,7 +88,7 @@ html,body{margin:0;height:100%;background:var(--chrome);color:var(--text);overfl
 #btnDiff.on{background:var(--changed);color:#231a05;border-color:transparent}
 
 /* ---------- banners (stacked, centered under the toolbar) ---------- */
-#banners{position:absolute;top:52px;left:50%;transform:translateX(-50%);z-index:45;
+#banners{position:absolute;top:92px;left:50%;transform:translateX(-50%);z-index:45;
   display:flex;flex-direction:column;align-items:center;gap:6px;pointer-events:none;max-width:92vw}
 .bnr{background:#3d2f12;border:1px solid #6b5320;color:#f2d791;padding:7px 16px;border-radius:9px;
   font-size:12.5px;display:flex;align-items:center;gap:10px;pointer-events:auto;max-width:100%}
@@ -97,8 +126,8 @@ html,body{margin:0;height:100%;background:var(--chrome);color:var(--text);overfl
 @keyframes spin{to{transform:rotate(360deg)}}
 #branchSel.current{border-color:var(--accent)}
 
-/* ---------- layout ---------- */
-#main{position:absolute;inset:46px 0 0 0;display:flex}
+/* ---------- layout (barra principal 46 + segunda barra 40 = 86) ---------- */
+#main{position:absolute;inset:86px 0 0 0;display:flex}
 #diagramSection{flex:1;display:flex;min-width:0}
 #docsSection{flex:1;display:flex;min-width:0}
 #historySection{flex:1;display:flex;min-width:0;justify-content:center;overflow-y:auto;
@@ -688,7 +717,7 @@ body.mode-edit #tabs .tab[data-tab="docs"]{display:none}
 #code::-moz-selection{background:rgba(143,179,160,.30)}
 
 /* ---------- barra de abas (estilo navegador, tipo Basalt) ---------- */
-#tabBar{position:absolute;top:46px;left:0;right:0;height:36px;z-index:39;
+#tabBar{position:absolute;top:86px;left:0;right:0;height:36px;z-index:38;
   display:flex;align-items:flex-end;gap:3px;padding:0 10px;
   background:linear-gradient(180deg,#1a1f22,#161b1d);border-bottom:1px solid var(--border);
   overflow-x:auto;scrollbar-width:none}
@@ -706,5 +735,5 @@ body.mode-edit #tabs .tab[data-tab="docs"]{display:none}
 .vtab .vt-lbl{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .vtab .vt-x{display:flex;opacity:.5;font-size:10px;padding:2px 4px;border-radius:4px;margin-left:2px}
 .vtab .vt-x:hover{opacity:1;background:#ffffff1c}
-body.has-tabs #main{top:82px}
-body.has-tabs #banners{top:88px}
+body.has-tabs #main{top:122px}
+body.has-tabs #banners{top:128px}

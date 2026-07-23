@@ -582,7 +582,7 @@ function applyFocus (name) {
 // linhas nunca atrás de tabela (A* com desvio) — parametrizável e persistido
 export function setOrthoAvoid (on) {
   orthoAvoid = !!on
-  $('btnOrtho').classList.toggle('on', orthoAvoid)
+  const b = $('btnOrtho'); if (b) b.classList.toggle('on', orthoAvoid) // botão removido da zoombar; estado vive na config
   try { localStorage.setItem('gabbro:routes', orthoAvoid ? '1' : '0') } catch (e) { /* storage cheio */ }
   if (model) recomputeRoutes()
 }
@@ -1070,8 +1070,7 @@ export function initDiagram (opts) {
   $('zin').addEventListener('click', () => { scale = Math.min(3, scale * 1.15); applyTransform() })
   $('zout').addEventListener('click', () => { scale = Math.max(0.08, scale / 1.15); applyTransform() })
   $('btnFit').addEventListener('click', () => fit())
-  // roteamento com desvio: persistido; o botão Rotas e a config Geral controlam o mesmo estado
-  $('btnOrtho').addEventListener('click', () => setOrthoAvoid(!orthoAvoid))
+  // roteamento com desvio: controlado pela config Geral (não há mais botão na zoombar)
   setOrthoAvoid(localStorage.getItem('gabbro:routes') !== '0')
   // grade de fundo: preferência persistida (padrão ligada)
   const gridOff = localStorage.getItem('gabbro:grid') === '0'

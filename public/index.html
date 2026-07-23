@@ -32,49 +32,63 @@
     </defs>
   </svg>
 
+  <!-- Barra principal: identidade + repositório | modo (centro) -->
   <div id="toolbar">
-    <svg class="logo-mark" aria-hidden="true"><use href="#logoMark"/></svg>
-    <span class="logo">Gabbro</span>
-    <button class="repo-btn" id="repoBtn" title="Repositório">
-      <span class="meta" id="repoName"></span><span id="repoCaret" class="hidden">&#9662;</span>
-    </button>
-    <nav id="tabs">
-      <button class="tab on" data-tab="diagram">Diagrama</button>
-      <button class="tab" data-tab="docs">Docs</button>
-    </nav>
-    <select id="branchSel" title="Branch"></select>
-    <span id="syncBadge" class="hidden" title=""></span>
-    <button class="btn hidden" id="btnSync" title="Puxa mudan&ccedil;as do remoto (rebase) e envia os commits locais">
-      <span class="sync-ico">&#10227;</span>Sincronizar</button>
-    <button class="btn" id="btnRefresh" title="Buscar o mais recente do remoto">&#10227;</button>
-    <button class="btn" id="btnDiff" title="Comparar duas branches">Diff</button>
-    <span id="diffCtrls" class="hidden">
-      <button class="btn on" id="btnDiffDim" title="Escurecer as tabelas sem mudan&ccedil;a">Destacar</button>
-      <button class="btn" id="btnDiffText" title="Ver o diff textual do DBML entre as branches">Texto</button>
-    </span>
-    <span class="spacer"></span>
-    <div id="searchWrap">
-      <button id="searchBtn" class="btn" title="Buscar tabela ou coluna">
-        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.8-3.8"/></svg>
+    <div class="tb-side tb-left">
+      <svg class="logo-mark" aria-hidden="true"><use href="#logoMark"/></svg>
+      <span class="logo">Gabbro</span>
+      <button class="repo-btn" id="repoBtn" title="Repositório">
+        <span class="meta" id="repoName"></span><span id="repoCaret" class="hidden">&#9662;</span>
       </button>
-      <select id="searchScope" title="Escopo da busca">
-        <option value="all" selected>Tudo</option>
-        <option value="tables">Tabelas</option>
-        <option value="columns">Colunas</option>
-      </select>
-      <input id="search" placeholder="Buscar&hellip;" autocomplete="off" title="Enter = pr&oacute;ximo, Shift+Enter = anterior">
-      <span id="searchCount" class="hidden"></span>
-      <button id="searchPrev" class="search-nav hidden" title="Anterior (Shift+Enter)">‹</button>
-      <button id="searchNext" class="search-nav hidden" title="Pr&oacute;ximo (Enter)">›</button>
     </div>
     <div id="modeToggle">
       <button id="modeView" class="on">Visualizar</button>
       <button id="modeEdit">Editar</button>
     </div>
-    <button class="btn" id="btnSettings" title="Configura&ccedil;&otilde;es">
-      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-    </button>
-    <button class="btn primary" id="btnSave" hidden>Salvar</button>
+    <div class="tb-side tb-right"></div>
+  </div>
+
+  <!-- Segunda barra: abas + branch | busca (centro) | ações -->
+  <div id="subbar">
+    <div class="sb-side sb-left">
+      <nav id="tabs">
+        <button class="tab on" data-tab="diagram">Diagrama</button>
+        <button class="tab" data-tab="docs">Docs</button>
+      </nav>
+      <select id="branchSel" title="Branch"></select>
+    </div>
+
+    <div id="searchWrap">
+      <span class="search-ico">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.8-3.8"/></svg>
+      </span>
+      <select id="searchScope" title="Escopo da busca">
+        <option value="all" selected>Tudo</option>
+        <option value="tables">Tabelas</option>
+        <option value="columns">Colunas</option>
+      </select>
+      <input id="search" placeholder="Buscar tabela ou coluna&hellip;" autocomplete="off" title="Enter = pr&oacute;ximo, Shift+Enter = anterior">
+      <span id="searchCount" class="hidden"></span>
+      <button id="searchPrev" class="search-nav hidden" title="Anterior (Shift+Enter)">‹</button>
+      <button id="searchNext" class="search-nav hidden" title="Pr&oacute;ximo (Enter)">›</button>
+    </div>
+
+    <div class="sb-side sb-right">
+      <button class="btn primary" id="btnSave" hidden>Salvar</button>
+      <button class="btn" id="btnDiff" title="Comparar duas branches">Diff</button>
+      <span id="diffCtrls" class="hidden">
+        <button class="btn on" id="btnDiffDim" title="Escurecer as tabelas sem mudan&ccedil;a">Destacar</button>
+        <button class="btn" id="btnDiffText" title="Ver o diff textual do DBML entre as branches">Texto</button>
+      </span>
+      <span class="sb-sep"></span>
+      <span id="syncBadge" class="hidden" title=""></span>
+      <button class="btn icon hidden" id="btnSync" title="Sincronizar: puxa do remoto (rebase) e envia os commits locais">
+        <span class="sync-ico">&#10227;</span></button>
+      <button class="btn icon" id="btnRefresh" title="Buscar o mais recente do remoto">&#10227;</button>
+      <button class="btn icon" id="btnSettings" title="Configura&ccedil;&otilde;es">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </button>
+    </div>
   </div>
 
   <div id="settingsModal" class="hidden">
@@ -303,7 +317,6 @@
           <button class="btn sm" id="btnArrange" title="Reorganizar as tabelas automaticamente">Organizar</button>
           <span class="zb-sep"></span>
           <div class="zb-toggles">
-            <button id="btnOrtho" title="Contornar as tabelas com as linhas">Rotas</button>
             <button id="btnHl" title="Destacar relacionamentos ao passar o mouse (pesado em diagramas grandes)">Hover</button>
             <button id="btnGrid" title="Mostrar/ocultar os pontos de fundo">Grade</button>
           </div>
