@@ -66,7 +66,7 @@ function createWindow (url) {
     minWidth: 940,
     minHeight: 640,
     show: false, // revealed when the renderer signals ready (closes the splash)
-    backgroundColor: '#232a36',
+    backgroundColor: '#1a1f21',
     title: 'Gabbro',
     icon: APP_ICON,
     webPreferences: {

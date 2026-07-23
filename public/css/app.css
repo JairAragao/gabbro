@@ -145,11 +145,12 @@ html,body{margin:0;height:100%;background:var(--chrome);color:var(--text);overfl
 #editorPane.hidden + #splitter{display:none}
 
 /* ---------- viewport / diagram ---------- */
-/* grade de pontos (estilo dbdiagram) sobre fundo chapado */
+/* grade de pontos (estilo dbdiagram): a imagem é o grid, escala e pana via JS
+   (background-size/position atualizados em applyTransform); a cor é o fundo */
 #viewport{flex:1;position:relative;overflow:hidden;cursor:grab;
-  background:
-    radial-gradient(circle, #ffffff24 1.2px, transparent 1.7px) 0 0/24px 24px,
-    #272d36}
+  background-color:#272d36;
+  background-image:radial-gradient(circle, #ffffff24 1.2px, transparent 1.7px);
+  background-repeat:repeat}
 #viewport.grabbing{cursor:grabbing}
 /* no will-change: the world spans thousands of px — caching it as one GPU layer
    overflows texture limits at zoom and makes tiles flicker/disappear */
@@ -549,7 +550,9 @@ path.mini-edge{fill:none;stroke:var(--accent);stroke-width:1.8;opacity:.75}
 circle.mini-dot{fill:var(--accent)}
 
 /* ---------- grade de fundo desligável ---------- */
-#viewport.no-grid{background:#272d36}
+#viewport.no-grid{background-image:none}
+/* zoom muito baixo: os pontos ficam colados e viram mancha — esconde */
+#viewport.far-grid{background-image:none}
 
 /* ---------- menu de auto-organização ---------- */
 #arrangeMenu{position:absolute;right:14px;bottom:62px;z-index:35;width:300px;background:#1b222d;

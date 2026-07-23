@@ -621,6 +621,11 @@ function applyTransform () {
     world.style.transform = `translate(${tx}px,${ty}px) scale(${scale})`
     // far mode: below 45% zoom column text/shadows are unreadable anyway — skip painting them
     world.classList.toggle('far', scale < 0.45)
+    // grid escala e pana junto com o mundo (base 24px = espaçamento em zoom 100%)
+    const g = 24 * scale
+    viewport.style.backgroundSize = `${g}px ${g}px`
+    viewport.style.backgroundPosition = `${tx}px ${ty}px`
+    viewport.classList.toggle('far-grid', g < 7)
     $('zlvl').textContent = Math.round(scale * 100) + '%'
   })
 }
