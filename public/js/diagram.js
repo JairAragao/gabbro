@@ -1,4 +1,6 @@
-const TABLE_W = 248, HEADER_H = 34, ROW_H = 24, GAP = 34, GRP_PAD = 26, ROUTE_M = 14
+// ROW_H tem que casar com o height do .col no CSS (25px) — divergência acumula
+// 1px por linha e desloca a âncora das setas em tabelas grandes
+const TABLE_W = 248, HEADER_H = 34, ROW_H = 25, GAP = 34, GRP_PAD = 26, ROUTE_M = 14
 const SVGNS = 'http://www.w3.org/2000/svg'
 const $ = id => document.getElementById(id)
 
@@ -41,6 +43,17 @@ const ICON = {
   plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
   minus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 12h14"/></svg>'
 }
+// Gutter de marcadores à esquerda do nome (estilo StarUML): PK / FK / U.
+// Compartilhado com o mini-diagrama do modo doc — regra visual única.
+export function colMarks (c) {
+  const marks = []
+  if (c.pk) marks.push('PK')
+  if (c.fk) marks.push('FK')
+  if (c.unique) marks.push('U')
+  const cls = c.pk ? 'pk' : (c.fk ? 'fk' : (c.unique ? 'uq' : ''))
+  return { text: marks.join('/'), cls }
+}
+
 const tableHeight = t => HEADER_H + t.columns.length * ROW_H
 const colIndexPk = nm => { const i = model.tables[nm].columns.findIndex(c => c.pk); return i < 0 ? 0 : i }
 function groupOf (nm) { for (const g of model.groups) if (g.tables.includes(nm)) return g; return null }
@@ -64,6 +77,122 @@ function computeLayout () {
     cursorX += cw + GRP_PAD * 2 + 60; rowMaxH = Math.max(rowMaxH, ch + GRP_PAD * 2)
   }
 }
+/* ---------- auto-organização (estilo dbdiagram) ---------- */
+
+// Esquerda → direita: camadas pela direção dos FKs (tabela referenciada fica
+// à esquerda de quem a referencia). Dentro da camada, ordena pelo barycenter
+// dos pais já posicionados pra reduzir cruzamentos; camada alta quebra em
+// sub-colunas.
+function layoutLeftRight () {
+  const layer = {}
+  model.order.forEach(t => { layer[t] = 0 })
+  for (let i = 0; i < 16; i++) {
+    let changed = false
+    for (const t of model.order) {
+      for (const c of model.tables[t].columns) {
+        if (c.fk && model.tables[c.fk.table] && c.fk.table !== t) {
+          const need = layer[c.fk.table] + 1
+          if (layer[t] < need && need < 60) { layer[t] = need; changed = true }
+        }
+      }
+    }
+    if (!changed) break
+  }
+  const byLayer = new Map()
+  for (const t of model.order) {
+    if (!byLayer.has(layer[t])) byLayer.set(layer[t], [])
+    byLayer.get(layer[t]).push(t)
+  }
+  positions = {}
+  const MAXH = 2600
+  let baseX = 0
+  for (const l of [...byLayer.keys()].sort((a, b) => a - b)) {
+    const list = byLayer.get(l)
+    const bary = t => {
+      const ys = []
+      for (const c of model.tables[t].columns) {
+        if (c.fk && positions[c.fk.table]) ys.push(positions[c.fk.table].y)
+      }
+      return ys.length ? ys.reduce((s, v) => s + v, 0) / ys.length : 0
+    }
+    list.sort((a, b) => bary(a) - bary(b) || a.localeCompare(b))
+    let subX = baseX, y = 0
+    for (const t of list) {
+      const h = tableHeight(model.tables[t])
+      if (y > 0 && y + h > MAXH) { subX += TABLE_W + GAP; y = 0 }
+      positions[t] = { x: subX, y }
+      y += h + GAP
+    }
+    baseX = subX + TABLE_W + 130
+  }
+}
+
+// Floco de neve: tabela mais conectada da componente no centro, vizinhas em
+// anéis concêntricos (BFS). Componentes lado a lado; isoladas em grade no fim.
+function layoutSnowflake () {
+  const adj = new Map(model.order.map(t => [t, new Set()]))
+  for (const t of model.order) {
+    for (const c of model.tables[t].columns) {
+      if (c.fk && model.tables[c.fk.table] && c.fk.table !== t) {
+        adj.get(t).add(c.fk.table); adj.get(c.fk.table).add(t)
+      }
+    }
+  }
+  positions = {}
+  const isolated = model.order.filter(t => !adj.get(t).size)
+  const unplaced = new Set(model.order.filter(t => adj.get(t).size))
+  let cx = 0, maxBottom = 0
+  while (unplaced.size) {
+    let hub = null
+    for (const t of unplaced) if (!hub || adj.get(t).size > adj.get(hub).size) hub = t
+    const rings = [[hub]]
+    unplaced.delete(hub)
+    const seen = new Set([hub])
+    for (;;) {
+      const next = []
+      for (const t of rings[rings.length - 1]) {
+        for (const n of adj.get(t)) if (!seen.has(n) && unplaced.delete(n)) { seen.add(n); next.push(n) }
+      }
+      if (!next.length) break
+      rings.push(next)
+    }
+    let maxR = 0
+    rings.forEach((ring, r) => {
+      if (r === 0) { positions[hub] = { x: cx, y: 0 }; return }
+      // raio mínimo pra circunferência comportar as alturas do anel
+      const need = ring.reduce((s, t) => s + tableHeight(model.tables[t]) + GAP, 0) / (2 * Math.PI) * 1.7
+      const R = Math.max(r * (TABLE_W + 160), need)
+      maxR = Math.max(maxR, R)
+      ring.forEach((t, i) => {
+        const ang = (i / ring.length) * 2 * Math.PI + (r % 2 ? 0.4 : 0)
+        positions[t] = { x: cx + Math.cos(ang) * R, y: Math.sin(ang) * R * 0.75 }
+        maxBottom = Math.max(maxBottom, positions[t].y + tableHeight(model.tables[t]))
+      })
+    })
+    cx += maxR * 2 + TABLE_W + 300
+  }
+  // isoladas: grade compacta abaixo de tudo
+  let x = 0, y = maxBottom + 200, rowH = 0
+  for (const t of isolated) {
+    const h = tableHeight(model.tables[t])
+    positions[t] = { x, y }
+    x += TABLE_W + GAP; rowH = Math.max(rowH, h)
+    if (x > 5200) { x = 0; y += rowH + GAP; rowH = 0 }
+  }
+}
+
+// algo: 'leftright' | 'snowflake' | 'compact' (compact = layout padrão por grupos)
+export function autoArrange (algo) {
+  if (!model) return
+  if (algo === 'leftright') layoutLeftRight()
+  else if (algo === 'snowflake') layoutSnowflake()
+  else computeLayout()
+  placeMissing()
+  render()
+  fit()
+  if (draggable) markDirty() // em modo edição a organização é salvável
+}
+
 function placeMissing () {
   const missing = model.order.filter(t => !positions[t])
   if (!missing.length) return
@@ -115,7 +244,7 @@ function render () {
     lbl.style.background = gs.labelBg; lbl.style.color = gs.labelFg
     lbl.innerHTML = `<span class="grip">${ICON.grip}</span><span class="glbl-name">${esc(g.name)}</span>`
     if (!diff) {
-      const gk = document.createElement('span'); gk.className = 'kebab'; gk.innerHTML = ICON.kebab; gk.title = 'Group color'
+      const gk = document.createElement('span'); gk.className = 'kebab'; gk.innerHTML = ICON.kebab; gk.title = 'Cor do grupo'
       gk.addEventListener('mousedown', e => e.stopPropagation())
       gk.addEventListener('click', e => { e.stopPropagation(); openPalette(gk, 'group', g.lineStart, g.color) })
       lbl.appendChild(gk)
@@ -135,15 +264,15 @@ function render () {
     hd.innerHTML = `<span class="hd-name">${esc(name)}</span>`
     const acts = document.createElement('span'); acts.className = 'hd-actions'
     if (dt && dt.status === 'modified') {
-      const b = document.createElement('span'); b.className = 'diff-flag mod'; b.textContent = 'M'; b.title = 'Table changed'
+      const b = document.createElement('span'); b.className = 'diff-flag mod'; b.textContent = 'M'; b.title = 'Tabela alterada'
       acts.appendChild(b)
     }
     if (t.note) {
       const ni = document.createElement('span'); ni.className = 'noteico'; ni.innerHTML = ICON.note
-      bindTip(ni, name, '', 'Note', t.note); acts.appendChild(ni)
+      bindTip(ni, name, '', 'Comentário', t.note); acts.appendChild(ni)
     }
     if (!diff) {
-      const tk = document.createElement('span'); tk.className = 'kebab'; tk.innerHTML = ICON.kebab; tk.title = 'Table color'
+      const tk = document.createElement('span'); tk.className = 'kebab'; tk.innerHTML = ICON.kebab; tk.title = 'Cor da tabela'
       tk.addEventListener('mousedown', e => e.stopPropagation())
       tk.addEventListener('click', e => { e.stopPropagation(); openPalette(tk, 'table', t.lineStart, t.color) })
       acts.appendChild(tk)
@@ -155,21 +284,20 @@ function render () {
       const row = document.createElement('div'); row.className = 'col'
       const dc = colDiff(name, c)
       if (dc && dc.status !== 'same' && (!dt || dt.status === 'modified')) row.classList.add('diff-' + dc.status)
-      const icon = c.pk ? ICON.key : (c.fk ? ICON.link : ICON.empty)
+      const mk = colMarks(c)
       const left = document.createElement('div'); left.className = 'cleft'
-      left.innerHTML = `${icon}<span class="cname ${c.pk ? 'pk' : ''}">${esc(c.name)}</span>`
+      left.innerHTML = `<span class="cmark ${mk.cls}">${mk.text}</span><span class="cname ${c.pk ? 'pk' : ''}">${esc(c.name)}</span>`
       if (c.note) {
         const ni = document.createElement('span'); ni.className = 'noteico'; ni.innerHTML = ICON.note
-        bindTip(ni, c.name, c.type, 'Note', c.note); left.appendChild(ni)
+        bindTip(ni, c.name, c.type, 'Comentário', c.note); left.appendChild(ni)
       }
       const right = document.createElement('div'); right.className = 'cright'
       right.innerHTML = `<span class="ctype">${esc(c.type)}</span>` +
-        (c.notnull ? '<span class="badge nn">NN</span>' : '') +
-        (c.unique ? '<span class="badge uq">UQ</span>' : '')
+        (c.notnull ? '<span class="badge nn">NN</span>' : '')
       row.appendChild(left); row.appendChild(right)
       if (dc && dc.status === 'modified' && dc.changes.length) {
         const txt = dc.changes.map(ch => `${ch.field}: ${ch.from == null ? '—' : ch.from} → ${ch.to == null ? '—' : ch.to}`).join('\n')
-        bindTip(row, c.name, c.type, 'Changed', txt)
+        bindTip(row, c.name, c.type, 'Alterado', txt)
       }
       body.appendChild(row)
     })
@@ -245,16 +373,11 @@ function lowerBound (arr, v) { let lo = 0, hi = arr.length; while (lo < hi) { co
  * (epoch-stamped — no per-edge clearing). Scales to hundreds of tables where
  * the old per-neighbor obstacle scan had to give up.
  */
-function buildRouter () {
-  const obs = model.order.map(nm => {
-    const p = positions[nm], t = model.tables[nm]
-    return { x1: p.x - ROUTE_M, y1: p.y - ROUTE_M, x2: p.x + TABLE_W + ROUTE_M, y2: p.y + tableHeight(t) + ROUTE_M }
-  })
+function buildRouterFrom (obs, eps) {
   const xset = new Set(), yset = new Set()
   for (const o of obs) { xset.add(o.x1); xset.add(o.x2); yset.add(o.y1); yset.add(o.y2) }
-  for (const e of edges) {
-    e._ep = endpointsOf(e)
-    xset.add(e._ep.aExit.x); yset.add(e._ep.a.y); xset.add(e._ep.bExit.x); yset.add(e._ep.b.y)
+  for (const ep of eps) {
+    xset.add(ep.aExit.x); yset.add(ep.a.y); xset.add(ep.bExit.x); yset.add(ep.b.y)
   }
   const xs = [...xset].sort((a, b) => a - b), ys = [...yset].sort((a, b) => a - b)
   const xi = new Map(xs.map((v, i) => [v, i])), yi = new Map(ys.map((v, i) => [v, i]))
@@ -278,10 +401,21 @@ function buildRouter () {
     g: new Float64Array(N), came: new Int32Array(N), stamp: new Int32Array(N), epoch: 0
   }
 }
+
+function buildRouter () {
+  const obs = model.order.map(nm => {
+    const p = positions[nm], t = model.tables[nm]
+    return { x1: p.x - ROUTE_M, y1: p.y - ROUTE_M, x2: p.x + TABLE_W + ROUTE_M, y2: p.y + tableHeight(t) + ROUTE_M }
+  })
+  for (const e of edges) e._ep = endpointsOf(e)
+  return buildRouterFrom(obs, edges.map(e => e._ep))
+}
+
 const TURN_COST = 30
-function routeAstar (e, R) {
+function routeAstar (e, R) { return routeAstarEp(e._ep, R) }
+function routeAstarEp (ep0, R) {
   const { xs, ys, xi, yi, W, H, hPass, vPass, g, came, stamp } = R
-  const sx = xi.get(e._ep.aExit.x), sy = yi.get(e._ep.a.y), gx = xi.get(e._ep.bExit.x), gy = yi.get(e._ep.b.y)
+  const sx = xi.get(ep0.aExit.x), sy = yi.get(ep0.a.y), gx = xi.get(ep0.bExit.x), gy = yi.get(ep0.b.y)
   if (sx == null || sy == null || gx == null || gy == null) return null
   const ep = ++R.epoch
   const gxV = xs[gx], gyV = ys[gy]
@@ -333,7 +467,7 @@ function routeAstar (e, R) {
   const pts = []
   for (let c = found; c >= 0; c = came[c]) { const xy = c >> 1; pts.push({ x: xs[(xy / H) | 0], y: ys[xy % H] }) }
   pts.reverse()
-  return simplify([{ x: e._ep.a.x, y: e._ep.a.y }, ...pts, { x: e._ep.b.x, y: e._ep.b.y }])
+  return simplify([{ x: ep0.a.x, y: ep0.a.y }, ...pts, { x: ep0.b.x, y: ep0.b.y }])
 }
 function routeCheap (e) {
   const ep = endpointsOf(e); e._ep = ep
@@ -379,7 +513,7 @@ function recomputeRoutes () {
   }
   step()
 }
-function orthPath (pts, r) {
+export function orthPath (pts, r) {
   r = r || 6; if (pts.length < 2) return ''
   let d = `M ${pts[0].x} ${pts[0].y}`
   for (let i = 1; i < pts.length - 1; i++) {
@@ -458,9 +592,10 @@ function markDirty () {
 // View mode: positions cannot be saved there, so dragging is disabled entirely
 let draggable = false
 export function setDraggable (on) { draggable = on; world.classList.toggle('locked', !on) }
+export function isDragging () { return dragging }
 
 function startTableDrag (e, name) {
-  if (!draggable) return
+  if (!draggable || e.button !== 0) return
   e.stopPropagation(); e.preventDefault()
   dragging = true; clearTimeout(hoverTimer); applyFocus(null)
   const sx = e.clientX, sy = e.clientY, ox = positions[name].x, oy = positions[name].y
@@ -478,7 +613,7 @@ function startTableDrag (e, name) {
   window.addEventListener('mousemove', mv); window.addEventListener('mouseup', up)
 }
 function startGroupDrag (e, g) {
-  if (!draggable) return
+  if (!draggable || e.button !== 0) return
   e.stopPropagation(); e.preventDefault()
   dragging = true; clearTimeout(hoverTimer); applyFocus(null)
   const mem = g.tables.filter(t => model.tables[t] && positions[t])
@@ -540,7 +675,7 @@ let parseFn = null // injected: (text) => model — keeps this module free of a 
 function onCodeInput () {
   const large = code.value.length > 120000
   if (large) { clearTimeout(hlTimer); hlTimer = setTimeout(() => { highlight(); syncGutter(); syncScroll() }, 350) } else { highlight(); syncGutter() }
-  syncScroll(); $('edDot').classList.remove('err'); $('edStatus').textContent = 'editing…'
+  syncScroll(); $('edDot').classList.remove('err'); $('edStatus').textContent = 'editando…'
   clearTimeout(editTimer); editTimer = setTimeout(reparseFromEditor, large ? 1200 : 450)
 }
 function reparseFromEditor () {
@@ -548,11 +683,11 @@ function reparseFromEditor () {
   if (txt === sourceText) { $('edDot').classList.remove('err'); $('edStatus').textContent = 'ok'; return }
   try {
     const m = parseFn(txt)
-    if (!m.order.length) { $('edDot').classList.add('err'); $('edStatus').textContent = 'no tables'; return }
+    if (!m.order.length) { $('edDot').classList.add('err'); $('edStatus').textContent = 'sem tabelas'; return }
     sourceText = txt
     $('edDot').classList.remove('err'); $('edStatus').textContent = 'ok'
     if (dbmlEditedCb) dbmlEditedCb(m, txt)
-  } catch (err) { $('edDot').classList.add('err'); $('edStatus').textContent = 'syntax error' }
+  } catch (err) { $('edDot').classList.add('err'); $('edStatus').textContent = 'erro de sintaxe' }
 }
 function selectTableInEditor (name) {
   const t = model.tables[name]; if (!t) return
@@ -606,15 +741,31 @@ export function initDiagram (opts) {
 
   let panning = false, px = 0, py = 0
   viewport.addEventListener('mousedown', e => {
+    // botão do meio (scroll) arrasta a tela de qualquer lugar — inclusive
+    // por cima de tabela (preventDefault mata o autoscroll do browser)
+    if (e.button === 1) {
+      e.preventDefault()
+      panning = true; px = e.clientX; py = e.clientY; viewport.classList.add('grabbing')
+      return
+    }
+    if (e.button !== 0) return
     if (e.target.closest('.tbl') || e.target.closest('.grp-label')) return
     panning = true; px = e.clientX; py = e.clientY; viewport.classList.add('grabbing')
   })
   window.addEventListener('mousemove', e => { if (panning) { tx += e.clientX - px; ty += e.clientY - py; px = e.clientX; py = e.clientY; applyTransform() } })
   window.addEventListener('mouseup', () => { panning = false; viewport.classList.remove('grabbing') })
   viewport.addEventListener('wheel', e => {
-    e.preventDefault(); const rc = viewport.getBoundingClientRect()
-    const mx = e.clientX - rc.left, my = e.clientY - rc.top, wx = (mx - tx) / scale, wy = (my - ty) / scale
-    const f = e.deltaY < 0 ? 1.12 : 1 / 1.12; scale = Math.max(0.08, Math.min(3, scale * f)); tx = mx - wx * scale; ty = my - wy * scale; applyTransform()
+    e.preventDefault()
+    if (e.ctrlKey || e.metaKey) {
+      // ctrl+scroll = zoom ancorado no cursor
+      const rc = viewport.getBoundingClientRect()
+      const mx = e.clientX - rc.left, my = e.clientY - rc.top, wx = (mx - tx) / scale, wy = (my - ty) / scale
+      const f = e.deltaY < 0 ? 1.12 : 1 / 1.12; scale = Math.max(0.08, Math.min(3, scale * f)); tx = mx - wx * scale; ty = my - wy * scale; applyTransform()
+      return
+    }
+    // scroll = rolagem (shift = horizontal)
+    if (e.shiftKey) { tx -= e.deltaY } else { tx -= e.deltaX; ty -= e.deltaY }
+    applyTransform()
   }, { passive: false })
 
   $('zin').innerHTML = ICON.plus; $('zout').innerHTML = ICON.minus
@@ -623,6 +774,31 @@ export function initDiagram (opts) {
   $('btnFit').addEventListener('click', () => fit())
   $('btnOrtho').addEventListener('click', () => { orthoAvoid = !orthoAvoid; $('btnOrtho').classList.toggle('on', orthoAvoid); if (model) recomputeRoutes() })
   $('btnOrtho').classList.add('on')
+  // grade de fundo: preferência persistida (padrão ligada)
+  const gridOff = localStorage.getItem('gabbro:grid') === '0'
+  viewport.classList.toggle('no-grid', gridOff)
+  $('btnGrid').classList.toggle('on', !gridOff)
+  $('btnGrid').addEventListener('click', () => {
+    const off = !viewport.classList.contains('no-grid')
+    viewport.classList.toggle('no-grid', off)
+    $('btnGrid').classList.toggle('on', !off)
+    localStorage.setItem('gabbro:grid', off ? '0' : '1')
+  })
+
+  // menu de auto-organização (estilo dbdiagram)
+  const arrMenu = $('arrangeMenu')
+  $('btnArrange').addEventListener('click', e => {
+    e.stopPropagation()
+    arrMenu.classList.toggle('hidden')
+  })
+  arrMenu.querySelectorAll('.arr-opt').forEach(b => b.addEventListener('click', () => {
+    arrMenu.classList.add('hidden')
+    autoArrange(b.dataset.a)
+  }))
+  document.addEventListener('mousedown', e => {
+    if (!e.target.closest('#arrangeMenu') && !e.target.closest('#btnArrange')) arrMenu.classList.add('hidden')
+  })
+
   // hover highlight: opt-in — with hundreds of tables the dim/undim repaints are heavy
   const hlSaved = localStorage.getItem('gabbro:hover-highlight') === '1'
   setHoverHighlight(hlSaved)
@@ -670,6 +846,41 @@ export function loadModel (m, positionsObj, diffResult, opts) {
   dirty = !!opts.dirty
 }
 
+// Roteia arestas ortogonais (90°) desviando de retângulos — mesmo A* em grade
+// Hanan do diagrama principal, parametrizado pro mini-diagrama do modo doc.
+// rects: [{x,y,w,h}] · specs: [{a:{x,y,side}, b:{x,y,side}}] (side 'l'|'r')
+// Retorna um array de listas de pontos (fallback: rota barata sem desvio).
+export function routeOrthoEdges (rects, specs) {
+  const obs = rects.map(r => ({
+    x1: r.x - ROUTE_M, y1: r.y - ROUTE_M, x2: r.x + r.w + ROUTE_M, y2: r.y + r.h + ROUTE_M
+  }))
+  const eps = specs.map(s => ({
+    a: s.a,
+    b: s.b,
+    aExit: { x: s.a.x + (s.a.side === 'r' ? ROUTE_M : -ROUTE_M), y: s.a.y },
+    bExit: { x: s.b.x + (s.b.side === 'r' ? ROUTE_M : -ROUTE_M), y: s.b.y }
+  }))
+  let R = null
+  try { R = buildRouterFrom(obs, eps) } catch (err) { R = null }
+  return eps.map(ep => {
+    const pts = R && routeAstarEp(ep, R)
+    if (pts) return pts
+    const mid = (ep.aExit.x + ep.bExit.x) / 2
+    return simplify([
+      { x: ep.a.x, y: ep.a.y }, { x: ep.aExit.x, y: ep.a.y },
+      { x: mid, y: ep.a.y }, { x: mid, y: ep.b.y },
+      { x: ep.bExit.x, y: ep.b.y }, { x: ep.b.x, y: ep.b.y }
+    ])
+  })
+}
+
+// snapshot das posições renderizadas — o mini-diagrama do modo doc espelha o layout principal
+export function getPositions () {
+  const out = {}
+  for (const [nm, p] of Object.entries(positions)) out[nm] = { x: p.x, y: p.y }
+  return out
+}
+
 export function getDirtyPositions () {
   const out = { version: 1, tables: {} }
   for (const [nm, p] of Object.entries(positions)) {
@@ -692,7 +903,7 @@ export function setEditorText (text) {
   sourceText = text
   code.value = text
   highlight(); syncGutter(); syncScroll()
-  $('edDot').classList.remove('err'); $('edStatus').textContent = 'ready'
+  $('edDot').classList.remove('err'); $('edStatus').textContent = 'pronto'
 }
 export function getEditorText () { return code.value }
 
@@ -726,7 +937,9 @@ function centerOn (m) {
   if (!tableEls[name]) return
   const p = positions[name], t = model.tables[name]; scale = 1
   tx = viewport.clientWidth / 2 - (p.x + TABLE_W / 2); ty = viewport.clientHeight / 2 - (p.y + tableHeight(t) / 2); applyTransform()
-  tableEls[name].classList.add('hl'); setTimeout(() => tableEls[name] && tableEls[name].classList.remove('hl'), 1200)
+  tableEls[name].classList.add('hl')
+  // não apagar o destaque se o hover-highlight estiver focando a mesma tabela
+  setTimeout(() => { if (tableEls[name] && focusName !== name) tableEls[name].classList.remove('hl') }, 1200)
   if (m.c) {
     const idx = t.columns.findIndex(c => c.name === m.c)
     const row = idx >= 0 && tableEls[name].querySelectorAll('.col')[idx]
