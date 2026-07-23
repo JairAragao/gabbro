@@ -251,9 +251,13 @@
         <div id="zoombar">
           <button class="btn sm" id="btnFit" title="Ajustar o diagrama &agrave; tela">Ajustar</button>
           <button class="btn sm" id="btnArrange" title="Reorganizar as tabelas automaticamente">Organizar</button>
-          <button class="btn sm" id="btnOrtho" title="Contornar as tabelas com as linhas">Rotas</button>
-          <button class="btn sm" id="btnHl" title="Destacar relacionamentos ao passar o mouse (pesado em diagramas grandes)">Hover</button>
-          <button class="btn sm" id="btnGrid" title="Mostrar/ocultar o quadriculado de fundo">Grade</button>
+          <span class="zb-sep"></span>
+          <div class="zb-toggles">
+            <button id="btnOrtho" title="Contornar as tabelas com as linhas">Rotas</button>
+            <button id="btnHl" title="Destacar relacionamentos ao passar o mouse (pesado em diagramas grandes)">Hover</button>
+            <button id="btnGrid" title="Mostrar/ocultar os pontos de fundo">Grade</button>
+          </div>
+          <span class="zb-sep"></span>
           <div class="z" id="zout"></div><div class="lvl" id="zlvl">100%</div><div class="z" id="zin"></div>
         </div>
         <div id="arrangeMenu" class="hidden">
@@ -265,7 +269,7 @@
           <button class="arr-opt" data-a="compact"><b>Compacto</b>
             <span>Grade compacta por grupos (layout padr&atilde;o).</span></button>
         </div>
-        <div class="hint">ctrl+scroll=zoom &middot; scroll=rolar &middot; bot&atilde;o do meio ou fundo=arrastar &middot; cabe&ccedil;alho=mover tabela &middot; r&oacute;tulo do grupo=mover grupo &middot; duplo clique=abrir no editor</div>
+        <div class="hint">ctrl+scroll=zoom &middot; scroll=rolar &middot; bot&atilde;o do meio=arrastar &middot; editar: arrastar no fundo=selecionar v&aacute;rias &middot; cabe&ccedil;alho=mover &middot; duplo clique=abrir no editor</div>
       </div>
     </section>
 

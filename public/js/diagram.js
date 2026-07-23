@@ -369,6 +369,9 @@ function render () {
     (edgesByTable[e.from] || (edgesByTable[e.from] = [])).push(e)
     if (e.to !== e.from) (edgesByTable[e.to] || (edgesByTable[e.to] = [])).push(e)
   }
+  // seleção sobrevive ao re-render (edição re-renderiza ao vivo); poda o que sumiu
+  selected = new Set([...selected].filter(nm => tableEls[nm]))
+  applySelClasses()
   sizeSvg(); recomputeRoutes(); positionGroups(); applyTransform()
 }
 function positionGroups () {
@@ -618,12 +621,97 @@ function markDirty () {
 }
 // View mode: positions cannot be saved there, so dragging is disabled entirely
 let draggable = false
-export function setDraggable (on) { draggable = on; world.classList.toggle('locked', !on) }
+export function setDraggable (on) {
+  draggable = on
+  world.classList.toggle('locked', !on)
+  if (!on) clearSelection()
+}
 export function isDragging () { return dragging }
+
+/* ---------- seleção em área (modo edição) ----------
+ * Arrastar no fundo desenha um retângulo; toda tabela que ele toca entra na
+ * seleção (shift acumula). Arrastar o cabeçalho de uma tabela selecionada
+ * move a seleção INTEIRA. Clique no fundo ou Esc limpa. */
+let selected = new Set()
+
+function applySelClasses () {
+  for (const nm in tableEls) tableEls[nm].classList.toggle('sel', selected.has(nm))
+}
+function clearSelection () {
+  if (!selected.size) return
+  selected.clear()
+  applySelClasses()
+}
+
+function startRubberBand (e) {
+  const rc = viewport.getBoundingClientRect()
+  const x0 = e.clientX, y0 = e.clientY
+  let rect = null
+  const mv = ev => {
+    if (!rect) {
+      if (Math.abs(ev.clientX - x0) + Math.abs(ev.clientY - y0) < 5) return
+      rect = document.createElement('div')
+      rect.className = 'selrect'
+      viewport.appendChild(rect)
+    }
+    rect.style.left = (Math.min(x0, ev.clientX) - rc.left) + 'px'
+    rect.style.top = (Math.min(y0, ev.clientY) - rc.top) + 'px'
+    rect.style.width = Math.abs(ev.clientX - x0) + 'px'
+    rect.style.height = Math.abs(ev.clientY - y0) + 'px'
+  }
+  const up = ev => {
+    window.removeEventListener('mousemove', mv)
+    window.removeEventListener('mouseup', up)
+    if (!rect) { clearSelection(); return } // clique simples no fundo
+    rect.remove()
+    const toWorld = (cx, cy) => ({ x: (cx - rc.left - tx) / scale, y: (cy - rc.top - ty) / scale })
+    const a = toWorld(Math.min(x0, ev.clientX), Math.min(y0, ev.clientY))
+    const b = toWorld(Math.max(x0, ev.clientX), Math.max(y0, ev.clientY))
+    if (!ev.shiftKey) selected.clear()
+    for (const nm of model.order) {
+      const p = positions[nm]
+      if (!p) continue
+      const h = tableHeight(model.tables[nm])
+      if (p.x < b.x && p.x + TABLE_W > a.x && p.y < b.y && p.y + h > a.y) selected.add(nm)
+    }
+    applySelClasses()
+  }
+  window.addEventListener('mousemove', mv)
+  window.addEventListener('mouseup', up)
+}
+
+// arrasta a seleção inteira (mesma mecânica do drag de grupo)
+function startSelectionDrag (e) {
+  dragging = true; clearTimeout(hoverTimer); applyFocus(null)
+  const mem = [...selected].filter(nm => positions[nm] && tableEls[nm])
+  const sx = e.clientX, sy = e.clientY
+  const orig = {}
+  mem.forEach(nm => { orig[nm] = { x: positions[nm].x, y: positions[nm].y } })
+  const memSet = new Set(mem)
+  const gEdges = edges.filter(ed => memSet.has(ed.from) || memSet.has(ed.to))
+  const mv = ev => {
+    const dx = (ev.clientX - sx) / scale, dy = (ev.clientY - sy) / scale
+    mem.forEach(nm => {
+      positions[nm].x = orig[nm].x + dx; positions[nm].y = orig[nm].y + dy
+      tableEls[nm].style.left = positions[nm].x + 'px'; tableEls[nm].style.top = positions[nm].y + 'px'
+    })
+    drawEdgesCheap(gEdges); positionGroups()
+  }
+  const up = ev => {
+    window.removeEventListener('mousemove', mv); window.removeEventListener('mouseup', up)
+    dragging = false
+    sizeSvg(); recomputeRoutes()
+    if (ev.clientX !== sx || ev.clientY !== sy) markDirty()
+  }
+  window.addEventListener('mousemove', mv); window.addEventListener('mouseup', up)
+}
 
 function startTableDrag (e, name) {
   if (!draggable || e.button !== 0) return
   e.stopPropagation(); e.preventDefault()
+  // tabela selecionada + seleção múltipla → move a seleção inteira
+  if (selected.has(name) && selected.size > 1) { startSelectionDrag(e); return }
+  clearSelection()
   dragging = true; clearTimeout(hoverTimer); applyFocus(null)
   const sx = e.clientX, sy = e.clientY, ox = positions[name].x, oy = positions[name].y
   const mv = ev => {
@@ -943,6 +1031,9 @@ export function initDiagram (opts) {
     }
     if (e.button !== 0) return
     if (e.target.closest('.tbl') || e.target.closest('.grp-label')) return
+    if (e.target.closest('#zoombar') || e.target.closest('#arrangeMenu') || e.target.closest('#diffNav')) return
+    // modo edição: arrasto no fundo = seleção em área; visualização = pan
+    if (draggable) { e.preventDefault(); startRubberBand(e); return }
     panning = true; px = e.clientX; py = e.clientY; viewport.classList.add('grabbing')
   })
   window.addEventListener('mousemove', e => { if (panning) { tx += e.clientX - px; ty += e.clientY - py; px = e.clientX; py = e.clientY; applyTransform() } })
@@ -1024,7 +1115,12 @@ export function initDiagram (opts) {
   buildPalette()
   $('palCustom').addEventListener('input', e => { if (palCtx) applyColor(palCtx, e.target.value) })
   document.addEventListener('mousedown', e => { if (!e.target.closest('#palette') && !e.target.closest('.kebab')) closePalette() })
-  document.addEventListener('keydown', e => { if (e.key === 'Escape') closePalette() })
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return
+    closePalette()
+    if (e.target === code) return // Esc dentro do editor não mexe na seleção
+    clearSelection()
+  })
 }
 
 export function loadModel (m, positionsObj, diffResult, opts) {
