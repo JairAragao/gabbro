@@ -90,6 +90,7 @@
           <button class="sm-tab on" data-set="general">Geral</button>
           <button class="sm-tab" data-set="sync">Sincroniza&ccedil;&atilde;o</button>
           <button class="sm-tab" data-set="history">Hist&oacute;rico</button>
+          <button class="sm-tab" data-set="keys">Atalhos</button>
           <button class="sm-tab" data-set="updates">Atualiza&ccedil;&otilde;es</button>
         </nav>
         <div class="sm-panels">
@@ -152,6 +153,32 @@
             <ul id="allHistList" class="ah-list"></ul>
             <div id="allHistEmpty" class="sm-empty hidden">sem commits ainda</div>
             <button class="btn hidden" id="allHistMore">Carregar mais</button>
+          </section>
+
+          <section id="setKeys" class="sm-panel hidden">
+            <div class="sm-section">
+              <div class="sm-sec-title">Diagrama</div>
+              <div class="key-row"><span class="keys"><kbd>Ctrl</kbd> + <kbd>scroll</kbd></span><span>Zoom no cursor</span></div>
+              <div class="key-row"><span class="keys"><kbd>scroll</kbd> / <kbd>Shift</kbd> + <kbd>scroll</kbd></span><span>Rolar vertical / horizontal</span></div>
+              <div class="key-row"><span class="keys"><kbd>bot&atilde;o do meio</kbd></span><span>Arrastar a tela (de qualquer lugar)</span></div>
+              <div class="key-row"><span class="keys">arrastar no fundo</span><span>Visualizar: arrasta a tela &middot; Editar: sele&ccedil;&atilde;o em &aacute;rea (<kbd>Shift</kbd> acumula)</span></div>
+              <div class="key-row"><span class="keys">arrastar cabe&ccedil;alho</span><span>Move a tabela (ou a sele&ccedil;&atilde;o inteira, se estiver selecionada)</span></div>
+              <div class="key-row"><span class="keys">arrastar r&oacute;tulo do grupo</span><span>Move o grupo inteiro</span></div>
+              <div class="key-row"><span class="keys">duplo clique na tabela</span><span>Abre a tabela no editor DBML</span></div>
+              <div class="key-row"><span class="keys"><kbd>Esc</kbd></span><span>Limpa a sele&ccedil;&atilde;o</span></div>
+            </div>
+            <div class="sm-section">
+              <div class="sm-sec-title">Editor DBML</div>
+              <div class="key-row"><span class="keys"><kbd>Ctrl</kbd> + <kbd>D</kbd></span><span>Seleciona a palavra; com sele&ccedil;&atilde;o, pula pra pr&oacute;xima ocorr&ecirc;ncia</span></div>
+              <div class="key-row"><span class="keys"><kbd>Ctrl</kbd> + <kbd>/</kbd></span><span>Comenta/descomenta as linhas</span></div>
+              <div class="key-row"><span class="keys"><kbd>Alt</kbd> + <kbd>&uarr;</kbd><kbd>&darr;</kbd></span><span>Move linha(s)</span></div>
+              <div class="key-row"><span class="keys"><kbd>Shift</kbd> + <kbd>Alt</kbd> + <kbd>&uarr;</kbd><kbd>&darr;</kbd></span><span>Duplica linha(s)</span></div>
+              <div class="key-row"><span class="keys"><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>K</kbd></span><span>Exclui linha(s)</span></div>
+              <div class="key-row"><span class="keys"><kbd>Ctrl</kbd> + <kbd>L</kbd></span><span>Seleciona a linha</span></div>
+              <div class="key-row"><span class="keys"><kbd>Tab</kbd> / <kbd>Shift</kbd> + <kbd>Tab</kbd></span><span>Indenta / desindenta (funciona em bloco)</span></div>
+              <div class="key-row"><span class="keys"><kbd>Enter</kbd></span><span>Mant&eacute;m a indenta&ccedil;&atilde;o (+2 espa&ccedil;os ap&oacute;s <code>{</code>)</span></div>
+              <div class="key-row"><span class="keys"><kbd>Ctrl</kbd> + (<kbd>Shift</kbd> +) <kbd>Enter</kbd></span><span>Nova linha abaixo / acima</span></div>
+            </div>
           </section>
 
           <section id="setUpdates" class="sm-panel hidden">
@@ -269,7 +296,6 @@
           <button class="arr-opt" data-a="compact"><b>Compacto</b>
             <span>Grade compacta por grupos (layout padr&atilde;o).</span></button>
         </div>
-        <div class="hint">ctrl+scroll=zoom &middot; scroll=rolar &middot; bot&atilde;o do meio=arrastar &middot; editar: arrastar no fundo=selecionar v&aacute;rias &middot; cabe&ccedil;alho=mover &middot; duplo clique=abrir no editor</div>
       </div>
     </section>
 

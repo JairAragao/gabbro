@@ -636,6 +636,7 @@ function setSettingsTab (tab) {
   $('setGeneral').classList.toggle('hidden', tab !== 'general')
   $('setSync').classList.toggle('hidden', tab !== 'sync')
   $('setHistory').classList.toggle('hidden', tab !== 'history')
+  $('setKeys').classList.toggle('hidden', tab !== 'keys')
   $('setUpdates').classList.toggle('hidden', tab !== 'updates')
   if (tab === 'sync') {
     // sync automático + saúde do git são do modo local — no hosted os
